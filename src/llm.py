@@ -486,7 +486,11 @@ def validate_key(provider: str, key: str) -> dict:
         if provider == "groq":
             req = urllib.request.Request(
                 "https://api.groq.com/openai/v1/models",
-                headers={"Authorization": f"Bearer {key}"},
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "User-Agent": "Mozilla/5.0 ClawIDE/3.1",
+                    "Accept": "application/json",
+                },
             )
             with urllib.request.urlopen(req, timeout=10) as r:
                 data = json.loads(r.read())
