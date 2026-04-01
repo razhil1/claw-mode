@@ -608,6 +608,21 @@ const MODEL_GROUPS = [
     },
 ];
 
+function _renderModelStatus(data) {
+    const el = document.getElementById('modelFetchStatus');
+    if (!el) return;
+    if (data.fetch_error) {
+        el.textContent = '⚠ Could not reach OpenRouter — showing Groq only';
+        el.className = 'model-fetch-status fetch-warn';
+    } else if (data.or_model_count > 0) {
+        el.textContent = `✓ ${data.or_model_count} free OpenRouter models live`;
+        el.className = 'model-fetch-status fetch-ok';
+    } else {
+        el.textContent = 'Add an OpenRouter key to unlock free models';
+        el.className = 'model-fetch-status fetch-hint';
+    }
+}
+
 async function loadModels() {
     const sel = document.getElementById('modelSelect');
     try {
@@ -615,7 +630,10 @@ async function loadModels() {
         const data = await res.json();
         sel.innerHTML = '';
 
+        S.models = {};
         data.models.forEach(m => { S.models[m.id] = m; });
+
+        _renderModelStatus(data);
 
         const placed = new Set();
 
@@ -635,15 +653,19 @@ async function loadModels() {
             sel.appendChild(g);
         }
 
-        // Any stragglers
-        const leftover = data.models.filter(m => !placed.has(m.id));
+        // Any OpenRouter free stragglers not matched by a group
+        const leftover = data.models.filter(m => !placed.has(m.id) && m.provider === 'openrouter' && m.tier === 'free');
         if (leftover.length) {
+            // Sort by context window desc then label
+            leftover.sort((a, b) => (b.context - a.context) || a.label.localeCompare(b.label));
             const g = document.createElement('optgroup');
-            g.label = 'Other';
+            g.label = '✦ More Free OpenRouter Models';
             leftover.forEach(m => {
+                placed.add(m.id);
                 const o = document.createElement('option');
                 o.value = m.id;
-                o.textContent = m.label;
+                const ctx = m.context >= 1000000 ? (m.context/1000000).toFixed(0)+'M' : Math.round(m.context/1000)+'K';
+                o.textContent = `${m.emoji || '✦'} ${m.label}  — ${ctx} ctx`;
                 if (m.active) o.selected = true;
                 g.appendChild(o);
             });
@@ -655,6 +677,27 @@ async function loadModels() {
         updateProviderLabel(active?.provider || 'groq');
     } catch {
         sel.innerHTML = '<option>Error loading models</option>';
+    }
+}
+
+async function refreshModels() {
+    const btn = document.getElementById('refreshModelsBtn');
+    const statusEl = document.getElementById('modelFetchStatus');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>'; }
+    if (statusEl) { statusEl.textContent = 'Fetching live free models from OpenRouter…'; statusEl.className = 'model-fetch-status fetch-hint'; }
+    try {
+        const res = await fetch('/api/models/refresh', { method: 'POST' });
+        const data = await res.json();
+        await loadModels();
+        if (data.ok) {
+            showToast(`Found ${data.or_free_models} free OpenRouter models`, 'success');
+        } else {
+            showToast('Could not reach OpenRouter: ' + (data.error || 'unknown error'), 'error');
+        }
+    } catch {
+        showToast('Refresh failed', 'error');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i>'; }
     }
 }
 
@@ -1108,6 +1151,8 @@ async function saveAndValidateKey(provider) {
             input.value = '';
             showToast(`${provider} key saved & verified`, 'success');
             checkKeyStatus();
+            // Refresh live model list — especially important after adding an OpenRouter key
+            refreshModels();
         } else {
             statusEl.className = 'key-status err';
             statusEl.textContent = '✗ ' + data.message;

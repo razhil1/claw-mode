@@ -9,7 +9,7 @@ import time
 import threading
 from typing import Generator
 
-from .llm import LLMClient, DEFAULT_MODEL, ALL_MODELS, set_runtime_key
+from .llm import LLMClient, DEFAULT_MODEL, get_all_models, SMART_MODELS, set_runtime_key
 from .toolbox import (
     tool_bash_run,
     tool_file_read,
@@ -178,7 +178,7 @@ class ClawAgent:
 
         # Emit smart routing info as a hint
         if self._is_smart():
-            info = ALL_MODELS.get(self.model, {})
+            info = SMART_MODELS.get(self.model, {})
             yield {"type": "thinking", "text": f"Smart routing: {info.get('description', self.model)}"}
 
         for turn in range(MAX_AGENT_TURNS):
@@ -211,7 +211,7 @@ class ClawAgent:
             active_label = self.model
             if self._is_smart():
                 concrete = llm.route(turn_type)
-                info = ALL_MODELS.get(concrete, {})
+                info = get_all_models().get(concrete, {})
                 active_label = info.get("label", concrete)
                 yield {
                     "type": "thinking",

@@ -1,5 +1,7 @@
 import os
 import json
+import time
+import threading
 import urllib.request
 import urllib.error
 from typing import List, Dict
@@ -14,17 +16,7 @@ def get_key(provider: str, env_var: str) -> str:
     return _runtime_keys.get(provider) or os.environ.get(env_var, "")
 
 
-# ===================== VERIFIED MODEL CATALOG =====================
-# All models verified against live OpenRouter /api/v1/models on 2026-04-01
-# Groq models verified against https://console.groq.com/docs/models
-#
-# Role tags:
-#   "fast"      — Low latency, good for iteration
-#   "thinking"  — Chain-of-thought / reasoning
-#   "coding"    — Specialized for code generation
-#   "powerful"  — Best quality for complex tasks
-#   "balanced"  — Good all-around quality
-
+# ===================== GROQ STATIC MODELS (always available) =====================
 GROQ_MODELS: dict[str, dict] = {
     "groq:llama-3.3-70b-versatile": {
         "label": "Llama 3.3 70B Versatile",
@@ -34,6 +26,7 @@ GROQ_MODELS: dict[str, dict] = {
         "groq_id": "llama-3.3-70b-versatile",
         "role": "balanced",
         "emoji": "⚡",
+        "price_note": "Free",
     },
     "groq:deepseek-r1-distill-llama-70b": {
         "label": "DeepSeek R1 Distill 70B",
@@ -43,6 +36,7 @@ GROQ_MODELS: dict[str, dict] = {
         "groq_id": "deepseek-r1-distill-llama-70b",
         "role": "thinking",
         "emoji": "🧠",
+        "price_note": "Free",
     },
     "groq:llama-3.1-8b-instant": {
         "label": "Llama 3.1 8B Instant",
@@ -52,6 +46,7 @@ GROQ_MODELS: dict[str, dict] = {
         "groq_id": "llama-3.1-8b-instant",
         "role": "fast",
         "emoji": "⚡",
+        "price_note": "Free",
     },
     "groq:gemma2-9b-it": {
         "label": "Gemma 2 9B",
@@ -61,6 +56,7 @@ GROQ_MODELS: dict[str, dict] = {
         "groq_id": "gemma2-9b-it",
         "role": "balanced",
         "emoji": "⚡",
+        "price_note": "Free",
     },
     "groq:mixtral-8x7b-32768": {
         "label": "Mixtral 8x7B MoE",
@@ -70,183 +66,7 @@ GROQ_MODELS: dict[str, dict] = {
         "groq_id": "mixtral-8x7b-32768",
         "role": "balanced",
         "emoji": "⚡",
-    },
-}
-
-OPENROUTER_FREE_MODELS: dict[str, dict] = {
-    "meta-llama/llama-3.3-70b-instruct:free": {
-        "label": "Llama 3.3 70B Instruct",
-        "short": "Free General",
-        "description": "Meta's Llama 3.3 70B via OpenRouter. Reliable, large-context, great for full-stack codegen.",
-        "context": 65536, "tier": "free", "provider": "openrouter",
-        "role": "balanced",
-        "emoji": "✦",
-    },
-    "qwen/qwen3-coder:free": {
-        "label": "Qwen3 Coder 480B",
-        "short": "Best Free Coder",
-        "description": "Alibaba's Qwen3 Coder — purpose-built for code. 262K context window. Best free coding model available.",
-        "context": 262000, "tier": "free", "provider": "openrouter",
-        "role": "coding",
-        "emoji": "💻",
-    },
-    "openai/gpt-oss-120b:free": {
-        "label": "GPT-OSS 120B",
-        "short": "OpenAI Free 120B",
-        "description": "OpenAI's open-source 120B model. Powerful, well-rounded, and completely free.",
-        "context": 131072, "tier": "free", "provider": "openrouter",
-        "role": "powerful",
-        "emoji": "✦",
-    },
-    "openai/gpt-oss-20b:free": {
-        "label": "GPT-OSS 20B",
-        "short": "OpenAI Free 20B",
-        "description": "OpenAI's open-source 20B model. Fast and capable for most coding tasks. Free tier.",
-        "context": 131072, "tier": "free", "provider": "openrouter",
-        "role": "fast",
-        "emoji": "✦",
-    },
-    "nvidia/nemotron-3-super-120b-a12b:free": {
-        "label": "Nemotron 120B Super",
-        "short": "NVIDIA Free 120B",
-        "description": "NVIDIA's Nemotron 120B parameter model. Very large, strong at complex multi-step reasoning.",
-        "context": 262144, "tier": "free", "provider": "openrouter",
-        "role": "powerful",
-        "emoji": "✦",
-    },
-    "qwen/qwen3.6-plus-preview:free": {
-        "label": "Qwen3.6 Plus Preview",
-        "short": "1M Context Free",
-        "description": "Alibaba's Qwen3.6+ with an enormous 1 million token context window. Free preview access.",
-        "context": 1000000, "tier": "free", "provider": "openrouter",
-        "role": "powerful",
-        "emoji": "✦",
-    },
-    "google/gemma-3-27b-it:free": {
-        "label": "Gemma 3 27B",
-        "short": "Google Free",
-        "description": "Google's Gemma 3 27B instruction-tuned. Capable and well-aligned for coding tasks.",
-        "context": 131072, "tier": "free", "provider": "openrouter",
-        "role": "balanced",
-        "emoji": "✦",
-    },
-    "nousresearch/hermes-3-llama-3.1-405b:free": {
-        "label": "Hermes 3 Llama 405B",
-        "short": "Largest Free",
-        "description": "NousResearch's fine-tuned Llama 3.1 405B — the largest freely available model. Exceptional at complex tasks.",
-        "context": 131072, "tier": "free", "provider": "openrouter",
-        "role": "powerful",
-        "emoji": "✦",
-    },
-    "liquid/lfm-2.5-1.2b-thinking:free": {
-        "label": "LFM 2.5 Thinking",
-        "short": "Free Thinking",
-        "description": "Liquid AI's small thinking model with visible reasoning chains. Fast and free.",
-        "context": 32768, "tier": "free", "provider": "openrouter",
-        "role": "thinking",
-        "emoji": "🧠",
-    },
-}
-
-OPENROUTER_PAID_MODELS: dict[str, dict] = {
-    "google/gemini-2.0-flash-001": {
-        "label": "Gemini 2.0 Flash",
-        "short": "Fastest Premium",
-        "description": "Google's Gemini 2.0 Flash — 1M context, blazing fast, very affordable. Best speed-to-quality ratio.",
-        "context": 1048576, "tier": "paid", "provider": "openrouter",
-        "role": "fast",
-        "emoji": "★",
-        "price_note": "$0.10/1M tokens",
-    },
-    "meta-llama/llama-4-scout": {
-        "label": "Llama 4 Scout",
-        "short": "Meta Fast",
-        "description": "Meta's Llama 4 Scout — 328K context, fast and affordable. Great for large codebase analysis.",
-        "context": 327680, "tier": "paid", "provider": "openrouter",
-        "role": "fast",
-        "emoji": "★",
-        "price_note": "$0.08/1M tokens",
-    },
-    "deepseek/deepseek-chat-v3-0324": {
-        "label": "DeepSeek V3 Chat",
-        "short": "Coding Powerhouse",
-        "description": "DeepSeek V3 — exceptional coding quality at an ultra-low price. 164K context. Top-tier code generation.",
-        "context": 163840, "tier": "paid", "provider": "openrouter",
-        "role": "coding",
-        "emoji": "💻",
-        "price_note": "$0.20/1M tokens",
-    },
-    "mistralai/devstral-small": {
-        "label": "Devstral Small",
-        "short": "Code Specialist",
-        "description": "Mistral's Devstral — built specifically for software engineering. Best coding model per dollar.",
-        "context": 131072, "tier": "paid", "provider": "openrouter",
-        "role": "coding",
-        "emoji": "💻",
-        "price_note": "$0.10/1M tokens",
-    },
-    "mistralai/codestral-2508": {
-        "label": "Codestral 2508",
-        "short": "Code Expert",
-        "description": "Mistral's code-focused model with 256K context. Excellent for large files and multi-file refactors.",
-        "context": 256000, "tier": "paid", "provider": "openrouter",
-        "role": "coding",
-        "emoji": "💻",
-        "price_note": "$0.30/1M tokens",
-    },
-    "meta-llama/llama-4-maverick": {
-        "label": "Llama 4 Maverick",
-        "short": "Meta Powerful",
-        "description": "Meta's Llama 4 Maverick — 1M context MoE model. Excellent reasoning and code for the price.",
-        "context": 1048576, "tier": "paid", "provider": "openrouter",
-        "role": "balanced",
-        "emoji": "★",
-        "price_note": "$0.15/1M tokens",
-    },
-    "google/gemini-2.5-flash": {
-        "label": "Gemini 2.5 Flash",
-        "short": "Google Best Value",
-        "description": "Google's Gemini 2.5 Flash — 1M context, excellent at code and reasoning. Very affordable.",
-        "context": 1048576, "tier": "paid", "provider": "openrouter",
-        "role": "balanced",
-        "emoji": "★",
-        "price_note": "$0.30/1M tokens",
-    },
-    "deepseek/deepseek-r1-0528": {
-        "label": "DeepSeek R1 (May 2025)",
-        "short": "Best Reasoning",
-        "description": "DeepSeek R1 — state-of-the-art chain-of-thought reasoning. Best free-tier adjacent for complex problem solving.",
-        "context": 163840, "tier": "paid", "provider": "openrouter",
-        "role": "thinking",
-        "emoji": "🧠",
-        "price_note": "$0.45/1M tokens",
-    },
-    "anthropic/claude-3.7-sonnet:thinking": {
-        "label": "Claude 3.7 Sonnet (Thinking)",
-        "short": "Extended Reasoning",
-        "description": "Claude 3.7 Sonnet with extended thinking enabled. Best model for hard algorithmic and architectural problems.",
-        "context": 200000, "tier": "paid", "provider": "openrouter",
-        "role": "thinking",
-        "emoji": "🧠",
-        "price_note": "$3.00/1M tokens",
-    },
-    "anthropic/claude-sonnet-4": {
-        "label": "Claude Sonnet 4",
-        "short": "Best Overall",
-        "description": "Anthropic's Claude Sonnet 4 — the gold standard for coding and complex full-stack development.",
-        "context": 200000, "tier": "paid", "provider": "openrouter",
-        "role": "powerful",
-        "emoji": "★",
-        "price_note": "$3.00/1M tokens",
-    },
-    "google/gemini-2.5-pro": {
-        "label": "Gemini 2.5 Pro",
-        "short": "Google Frontier",
-        "description": "Google's Gemini 2.5 Pro with 1M context. Exceptional at multi-file reasoning and code generation.",
-        "context": 1048576, "tier": "paid", "provider": "openrouter",
-        "role": "powerful",
-        "emoji": "★",
-        "price_note": "$1.25/1M tokens",
+        "price_note": "Free",
     },
 }
 
@@ -259,6 +79,7 @@ SMART_MODELS: dict[str, dict] = {
         "context": 128000, "tier": "free", "provider": "smart",
         "role": "balanced",
         "emoji": "🤖",
+        "price_note": "Free",
         "routing": {
             "thinking": "groq:deepseek-r1-distill-llama-70b",
             "coding":   "groq:llama-3.3-70b-versatile",
@@ -266,27 +87,6 @@ SMART_MODELS: dict[str, dict] = {
             "default":  "groq:llama-3.3-70b-versatile",
         },
     },
-    "smart:free": {
-        "label": "Smart Combo (Free OR)",
-        "short": "Auto-Routing OR Free",
-        "description": "Automatically routes to best free OpenRouter models: Qwen3 Coder for coding, GPT-OSS 120B for reasoning, Llama 70B for chat.",
-        "context": 131072, "tier": "free", "provider": "smart",
-        "role": "balanced",
-        "emoji": "🤖",
-        "routing": {
-            "thinking": "openai/gpt-oss-120b:free",
-            "coding":   "qwen/qwen3-coder:free",
-            "fast":     "openai/gpt-oss-20b:free",
-            "default":  "meta-llama/llama-3.3-70b-instruct:free",
-        },
-    },
-}
-
-ALL_MODELS: dict[str, dict] = {
-    **SMART_MODELS,
-    **GROQ_MODELS,
-    **OPENROUTER_FREE_MODELS,
-    **OPENROUTER_PAID_MODELS,
 }
 
 DEFAULT_MODEL = "groq:llama-3.3-70b-versatile"
@@ -296,6 +96,157 @@ CODING_TOOLS = {"FileEditTool", "BashTool"}
 # Tools that can use the fast model
 FAST_TOOLS = {"ListDirTool", "FileReadTool", "ViewFileLinesTool"}
 
+
+# ===================== LIVE OPENROUTER FREE MODEL DETECTION =====================
+_or_cache_lock = threading.Lock()
+_or_model_cache: dict = {
+    "models": {},       # model_id -> info dict
+    "fetched_at": 0.0,  # unix timestamp
+    "error": None,      # last error message if any
+}
+CACHE_TTL = 1800  # 30 minutes
+
+
+def _is_free_model(m: dict) -> bool:
+    """Return True if an OpenRouter model entry is genuinely free (zero cost)."""
+    mid = m.get("id", "")
+    # Models ending in :free are explicitly marked as free tier
+    if mid.endswith(":free"):
+        return True
+    # Also check actual pricing from the API
+    pricing = m.get("pricing") or {}
+    try:
+        prompt_cost = float(pricing.get("prompt", "1") or "1")
+        completion_cost = float(pricing.get("completion", "1") or "1")
+        return prompt_cost == 0.0 and completion_cost == 0.0
+    except (ValueError, TypeError):
+        return False
+
+
+def _or_model_to_info(m: dict) -> dict:
+    """Convert a raw OpenRouter model entry to our internal info dict."""
+    mid = m.get("id", "")
+    name = m.get("name") or mid.split("/")[-1].replace("-", " ").title()
+    ctx = m.get("context_length") or 4096
+
+    # Guess role from name/id keywords
+    mid_lower = mid.lower()
+    name_lower = name.lower()
+    if any(k in mid_lower for k in ("r1", "think", "reason", "o1", "o3", "qwq")):
+        role = "thinking"
+        emoji = "🧠"
+    elif any(k in mid_lower for k in ("coder", "code", "devstral", "codestral", "starcoder", "deepseek-coder")):
+        role = "coding"
+        emoji = "💻"
+    elif any(k in mid_lower for k in ("405b", "120b", "72b", "70b", "large", "pro", "opus")):
+        role = "powerful"
+        emoji = "✦"
+    elif any(k in mid_lower for k in ("7b", "8b", "small", "mini", "instant", "fast", "flash", "turbo")):
+        role = "fast"
+        emoji = "✦"
+    else:
+        role = "balanced"
+        emoji = "✦"
+
+    # Build a human-readable description
+    ctx_k = f"{ctx // 1000}K" if ctx >= 1000 else str(ctx)
+    description = m.get("description") or f"{name} — {ctx_k} context window. Available free on OpenRouter."
+
+    return {
+        "label": name,
+        "short": f"{ctx_k} ctx",
+        "description": description,
+        "context": ctx,
+        "tier": "free",
+        "provider": "openrouter",
+        "role": role,
+        "emoji": emoji,
+        "price_note": "Free",
+    }
+
+
+def fetch_openrouter_free_models(api_key: str = "", force: bool = False) -> dict[str, dict]:
+    """
+    Fetch the live list of free models from OpenRouter.
+    Results are cached for CACHE_TTL seconds.
+    Returns a dict of model_id -> info, or {} on failure.
+    """
+    with _or_cache_lock:
+        age = time.time() - _or_model_cache["fetched_at"]
+        if not force and _or_model_cache["fetched_at"] > 0 and age < CACHE_TTL:
+            return _or_model_cache["models"]
+
+    # Fetch outside the lock so we don't block callers
+    headers = {"Content-Type": "application/json", "User-Agent": "ClawIDE/3.2"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/models",
+            headers=headers,
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = json.loads(resp.read().decode("utf-8"))
+
+        models_raw = raw.get("data", [])
+        free_models: dict[str, dict] = {}
+        for m in models_raw:
+            if _is_free_model(m):
+                mid = m.get("id", "")
+                if not mid:
+                    continue
+                # Ensure the model id ends with :free (normalise)
+                if not mid.endswith(":free"):
+                    mid = mid + ":free"
+                    m["id"] = mid
+                free_models[mid] = _or_model_to_info(m)
+
+        with _or_cache_lock:
+            _or_model_cache["models"] = free_models
+            _or_model_cache["fetched_at"] = time.time()
+            _or_model_cache["error"] = None
+
+        return free_models
+
+    except Exception as exc:
+        with _or_cache_lock:
+            _or_model_cache["error"] = str(exc)
+            # Return whatever we had before (may be empty)
+            return _or_model_cache["models"]
+
+
+def get_all_models(or_key: str = "") -> dict[str, dict]:
+    """
+    Return the full model catalog:
+      • Smart combo models (always)
+      • Groq free models (always)
+      • OpenRouter free models fetched live (with cache)
+    """
+    or_free = fetch_openrouter_free_models(api_key=or_key or get_key("openrouter", "OPENROUTER_API_KEY"))
+    return {
+        **SMART_MODELS,
+        **GROQ_MODELS,
+        **or_free,
+    }
+
+
+# Initial module-level snapshot (used for backwards compatibility)
+ALL_MODELS: dict[str, dict] = {
+    **SMART_MODELS,
+    **GROQ_MODELS,
+}
+
+
+def refresh_all_models() -> tuple[dict, str | None]:
+    """Force-refresh OpenRouter free models. Returns (models_dict, error_or_None)."""
+    or_key = get_key("openrouter", "OPENROUTER_API_KEY")
+    free = fetch_openrouter_free_models(api_key=or_key, force=True)
+    err = _or_model_cache.get("error")
+    return {**SMART_MODELS, **GROQ_MODELS, **free}, err
+
+
+# ===================== HTTP HELPERS =====================
 
 def _post_json(url: str, headers: dict, body: dict, timeout: int = 120) -> dict:
     req = urllib.request.Request(
@@ -311,46 +262,37 @@ def _post_json(url: str, headers: dict, body: dict, timeout: int = 120) -> dict:
 class LLMClient:
     """
     Unified LLM client supporting Groq, OpenRouter, and Smart multi-model routing.
-
-    For smart: models, route() must be called before each chat() to tell the client
-    what kind of turn this is (thinking / coding / fast / default).
     """
 
     def __init__(self, model: str = None):
         self.model = model or os.environ.get("CLAW_MODEL", DEFAULT_MODEL)
-        self._routed_model: str | None = None  # used by smart routing
-
-    # ── Smart routing ────────────────────────────────────────────────────────
+        self._routed_model: str | None = None
 
     def is_smart(self) -> bool:
         return self.model.startswith("smart:")
 
+    def _current_models(self) -> dict:
+        return get_all_models()
+
     def route(self, turn_type: str) -> str:
-        """
-        Select a concrete model for this turn based on turn_type.
-        turn_type: 'thinking' | 'coding' | 'fast' | 'default'
-        Returns the actual model id that will be used.
-        """
         if not self.is_smart():
             return self.model
-        routing = ALL_MODELS[self.model]["routing"]
+        routing = SMART_MODELS[self.model]["routing"]
         concrete = routing.get(turn_type) or routing["default"]
         self._routed_model = concrete
         return concrete
 
     def route_for_tool(self, tool_name: str | None) -> str:
-        """Convenience: pick routing slot from a tool name."""
         if tool_name in CODING_TOOLS:
             return self.route("coding")
         if tool_name in FAST_TOOLS:
             return self.route("fast")
         return self.route("default")
 
-    # ── Main chat entry ──────────────────────────────────────────────────────
-
     def chat(self, messages: List[Dict[str, str]], turn_type: str = "default") -> str:
         model = self.route(turn_type) if self.is_smart() else self.model
-        info = ALL_MODELS.get(model, {})
+        all_models = self._current_models()
+        info = all_models.get(model, {})
         provider = info.get("provider", "openrouter")
         try:
             if provider == "groq":
@@ -360,8 +302,6 @@ class LLMClient:
         except Exception as e:
             return f"Error: {str(e)}"
 
-    # ── Groq ─────────────────────────────────────────────────────────────────
-
     def _call_groq(self, messages: List[Dict[str, str]], model: str) -> str:
         api_key = get_key("groq", "GROQ_API_KEY")
         if not api_key:
@@ -370,7 +310,8 @@ class LLMClient:
                 "No Groq API key found. Get a free key at https://console.groq.com "
                 "and add it in the ⚙ Settings panel."
             )
-        info = ALL_MODELS.get(model, {})
+        all_models = self._current_models()
+        info = all_models.get(model, {})
         groq_id = info.get("groq_id") or model.replace("groq:", "")
         body = {
             "model": groq_id,
@@ -386,7 +327,6 @@ class LLMClient:
             result = _post_json("https://api.groq.com/openai/v1/chat/completions", headers, body)
             if "choices" in result:
                 content = result["choices"][0]["message"]["content"]
-                # DeepSeek R1 distill puts reasoning in <think> tags — strip them
                 content = _strip_think_tags(content)
                 return content
             return f"Groq API Error: {json.dumps(result)}"
@@ -404,8 +344,6 @@ class LLMClient:
             return f"Groq HTTP {e.code}: {body_text[:300]}"
         except Exception as e:
             return f"Groq connection error: {str(e)}"
-
-    # ── OpenRouter ───────────────────────────────────────────────────────────
 
     def _call_openrouter(self, messages: List[Dict[str, str]], model: str) -> str:
         api_key = get_key("openrouter", "OPENROUTER_API_KEY")
@@ -431,7 +369,6 @@ class LLMClient:
             result = _post_json("https://openrouter.ai/api/v1/chat/completions", headers, body)
             if "choices" in result:
                 return result["choices"][0]["message"]["content"] or ""
-            # Surface OpenRouter error clearly
             err = result.get("error", {})
             return f"CLAW_ERROR:API_ERROR:openrouter|{err.get('message', json.dumps(result)[:200])}"
         except urllib.error.HTTPError as e:
@@ -458,12 +395,9 @@ class LLMClient:
         except Exception as e:
             return f"OpenRouter connection error: {str(e)}"
 
-    # ── Active model info ────────────────────────────────────────────────────
-
     def get_active_model_info(self) -> dict:
-        """Return the catalog entry for the model currently in use."""
         model = self._routed_model or self.model
-        return ALL_MODELS.get(model, {})
+        return get_all_models().get(model, {})
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -475,7 +409,6 @@ def _read_http_error(e: urllib.error.HTTPError) -> str:
         return ""
 
 def _strip_think_tags(text: str) -> str:
-    """Remove <think>...</think> blocks from DeepSeek-style responses."""
     import re
     return re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE).strip()
 
@@ -488,7 +421,7 @@ def validate_key(provider: str, key: str) -> dict:
                 "https://api.groq.com/openai/v1/models",
                 headers={
                     "Authorization": f"Bearer {key}",
-                    "User-Agent": "Mozilla/5.0 ClawIDE/3.1",
+                    "User-Agent": "Mozilla/5.0 ClawIDE/3.2",
                     "Accept": "application/json",
                 },
             )
@@ -497,7 +430,6 @@ def validate_key(provider: str, key: str) -> dict:
                 count = len(data.get("data", []))
                 return {"ok": True, "message": f"Groq key valid — {count} models available"}
         else:
-            # Use the /auth/key endpoint — no model call needed, just checks the key
             req = urllib.request.Request(
                 "https://openrouter.ai/api/v1/auth/key",
                 headers={

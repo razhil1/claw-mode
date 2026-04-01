@@ -39,7 +39,13 @@
 
     <!-- Model Selector -->
     <div class="sidebar-section model-section">
-        <div class="section-label"><i class="fa-solid fa-microchip"></i> Model</div>
+        <div class="section-label">
+            <span><i class="fa-solid fa-microchip"></i> Model</span>
+            <button onclick="refreshModels()" id="refreshModelsBtn" title="Refresh free model list from OpenRouter" class="fe-icon-btn">
+                <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+        </div>
+        <div class="model-fetch-status" id="modelFetchStatus"></div>
         <select id="modelSelect" onchange="switchModel(this.value)" class="styled-select"></select>
         <div class="model-card" id="modelCard">
             <div class="model-card-top">

@@ -5,8 +5,10 @@ import time
 import threading
 from src.agent import ClawAgent
 from src.toolbox import tool_bash_run, get_workspace_root, tool_file_read, tool_file_edit, tool_file_delete
-from src.llm import ALL_MODELS, DEFAULT_MODEL, validate_key, set_runtime_key
-CODING_MODELS = ALL_MODELS  # backwards-compatible alias
+from src.llm import (
+    get_all_models, refresh_all_models, DEFAULT_MODEL,
+    validate_key, set_runtime_key, _or_model_cache,
+)
 
 app = Flask(__name__)
 
@@ -135,22 +137,44 @@ def workspace_stats():
 # ===================== MODELS API =====================
 @app.route("/api/models")
 def get_models():
+    all_models = get_all_models()
     result = []
-    for model_id, info in ALL_MODELS.items():
+    for model_id, info in all_models.items():
         result.append({
             "id": model_id,
             "label": info["label"],
             "short": info.get("short", ""),
-            "description": info["description"],
-            "context": info["context"],
-            "tier": info["tier"],
+            "description": info.get("description", ""),
+            "context": info.get("context", 4096),
+            "tier": info.get("tier", "free"),
             "provider": info.get("provider", "openrouter"),
             "role": info.get("role", "balanced"),
-            "emoji": info.get("emoji", ""),
+            "emoji": info.get("emoji", "✦"),
             "price_note": info.get("price_note", "Free"),
             "active": model_id == ACTIVE_MODEL,
         })
-    return jsonify({"models": result, "active": ACTIVE_MODEL})
+    cache_age = int(time.time() - _or_model_cache.get("fetched_at", 0))
+    or_count = sum(1 for m in result if m["provider"] == "openrouter")
+    return jsonify({
+        "models": result,
+        "active": ACTIVE_MODEL,
+        "or_model_count": or_count,
+        "cache_age_seconds": cache_age,
+        "fetch_error": _or_model_cache.get("error"),
+    })
+
+
+@app.route("/api/models/refresh", methods=["POST"])
+def refresh_models():
+    """Force-refresh the OpenRouter free model list from the live API."""
+    all_models, error = refresh_all_models()
+    or_count = sum(1 for info in all_models.values() if info.get("provider") == "openrouter")
+    return jsonify({
+        "ok": error is None,
+        "error": error,
+        "total_models": len(all_models),
+        "or_free_models": or_count,
+    })
 
 
 @app.route("/api/model", methods=["POST"])
@@ -158,11 +182,13 @@ def set_model():
     global ACTIVE_MODEL
     data = request.json
     model_id = data.get("model", "")
-    if model_id not in CODING_MODELS:
+    all_models = get_all_models()
+    if model_id not in all_models:
         return jsonify({"error": "Unknown model"}), 400
     ACTIVE_MODEL = model_id
     os.environ["CLAW_MODEL"] = model_id
-    return jsonify({"success": True, "active": ACTIVE_MODEL, "provider": CODING_MODELS[model_id].get("provider", "openrouter")})
+    provider = all_models[model_id].get("provider", "openrouter")
+    return jsonify({"success": True, "active": ACTIVE_MODEL, "provider": provider})
 
 
 # ===================== TERMINAL API =====================
