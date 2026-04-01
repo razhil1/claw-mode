@@ -41,4 +41,4 @@ run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
 [userenv]
 
 [userenv.shared]
-NVIDIA_API_KEY = "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"
+NVIDIA_API_KEY = "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"

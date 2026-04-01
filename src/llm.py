@@ -105,6 +105,20 @@ NVIDIA_MODELS: dict[str, dict] = {
         "price_note": "Free",
         "nvidia_id": "google/gemma-3-12b-it",
     },
+    "nvidia:minimax-m2.5": {
+        "label": "MiniMax M2.5",
+        "short": "Long Context Powerhouse",
+        "description": "MiniMax M2.5 — large-scale model with exceptional long-context understanding and generation.",
+        "context": 1000000,
+        "tier": "free",
+        "provider": "nvidia",
+        "role": "powerful",
+        "emoji": "🚀",
+        "price_note": "Free",
+        "nvidia_id": "minimaxai/minimax-m2.5",
+        "temperature": 1,
+        "top_p": 0.95,
+    },
 }
 
 ALL_MODELS = NVIDIA_MODELS
@@ -144,16 +158,20 @@ class LLMClient:
                 base_url=NVIDIA_BASE_URL,
                 api_key=api_key,
             )
+            temperature = info.get("temperature", 0.2)
+            top_p = info.get("top_p", 0.7)
             completion = client.chat.completions.create(
                 model=nvidia_model_id,
                 messages=messages,
-                temperature=0.2,
-                top_p=0.7,
+                temperature=temperature,
+                top_p=top_p,
                 max_tokens=8192,
                 stream=True,
             )
             result = ""
             for chunk in completion:
+                if not getattr(chunk, "choices", None):
+                    continue
                 delta = chunk.choices[0].delta
                 if delta.content is not None:
                     result += delta.content
