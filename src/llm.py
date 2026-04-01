@@ -493,25 +493,20 @@ def validate_key(provider: str, key: str) -> dict:
                 count = len(data.get("data", []))
                 return {"ok": True, "message": f"Groq key valid — {count} models available"}
         else:
-            # Use a known-free lightweight model for validation
-            body = json.dumps({
-                "model": "meta-llama/llama-3.2-3b-instruct:free",
-                "messages": [{"role": "user", "content": "Hi"}],
-                "max_tokens": 1,
-            }).encode()
+            # Use the /auth/key endpoint — no model call needed, just checks the key
             req = urllib.request.Request(
-                "https://openrouter.ai/api/v1/chat/completions",
-                data=body,
+                "https://openrouter.ai/api/v1/auth/key",
                 headers={
                     "Authorization": f"Bearer {key}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://claw-ide.replit.app",
-                    "X-Title": "Claw IDE",
                 },
-                method="POST",
             )
-            with urllib.request.urlopen(req, timeout=15) as r:
-                return {"ok": True, "message": "OpenRouter key valid ✓"}
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read())
+                label = data.get("data", {}).get("label") or "valid"
+                credits = data.get("data", {}).get("limit_remaining")
+                credit_str = f" · ${credits:.4f} credits" if credits is not None else ""
+                return {"ok": True, "message": f"OpenRouter key valid ✓ ({label}{credit_str})"}
     except urllib.error.HTTPError as e:
         body_text = _read_http_error(e)
         if e.code == 401:
