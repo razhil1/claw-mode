@@ -217,6 +217,50 @@
     </div>
 </div>
 
+<!-- ==================== SETTINGS MODAL ==================== -->
+<div class="modal-overlay" id="settingsModal" onclick="hideSettings(event)">
+    <div class="modal settings-modal">
+        <div class="modal-title"><i class="fa-solid fa-gear"></i> API Key Settings</div>
+        <p class="settings-desc">Configure your LLM provider API keys. Keys are saved for this session and used immediately — no restart needed.</p>
+
+        <!-- Groq -->
+        <div class="settings-provider">
+            <div class="settings-provider-header">
+                <div class="settings-provider-name">
+                    <span class="provider-badge groq-badge">⚡ Groq</span>
+                    <span class="provider-sub">Free · Ultra-fast · Llama 3, Mixtral</span>
+                </div>
+                <a href="https://console.groq.com/keys" target="_blank" class="get-key-link">Get free key →</a>
+            </div>
+            <div class="key-input-row">
+                <input type="password" id="groqKeyInput" placeholder="gsk_..." class="key-input" autocomplete="off">
+                <button class="validate-btn" onclick="saveAndValidateKey('groq')"><i class="fa-solid fa-check"></i> Save & Test</button>
+            </div>
+            <div class="key-status" id="groqKeyStatus"></div>
+        </div>
+
+        <!-- OpenRouter -->
+        <div class="settings-provider">
+            <div class="settings-provider-header">
+                <div class="settings-provider-name">
+                    <span class="provider-badge or-badge">🔀 OpenRouter</span>
+                    <span class="provider-sub">Free + Paid · Claude, GPT-4o, Gemini, DeepSeek</span>
+                </div>
+                <a href="https://openrouter.ai/keys" target="_blank" class="get-key-link">Get free key →</a>
+            </div>
+            <div class="key-input-row">
+                <input type="password" id="orKeyInput" placeholder="sk-or-v1-..." class="key-input" autocomplete="off">
+                <button class="validate-btn" onclick="saveAndValidateKey('openrouter')"><i class="fa-solid fa-check"></i> Save & Test</button>
+            </div>
+            <div class="key-status" id="orKeyStatus"></div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:16px">
+            <button class="btn-ghost" onclick="hideSettings()">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- ==================== NEW FILE DIALOG ==================== -->
 <div class="modal-overlay" id="newFileModal" onclick="hideNewFileDialog(event)">
     <div class="modal">

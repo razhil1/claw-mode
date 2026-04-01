@@ -8,7 +8,7 @@ import re
 import time
 from typing import Generator, Iterator
 
-from .llm import OpenRouterClient, DEFAULT_MODEL
+from .llm import LLMClient, DEFAULT_MODEL, set_runtime_key
 from .toolbox import (
     tool_bash_run,
     tool_file_read,
@@ -127,6 +127,7 @@ class ClawAgent:
     def __init__(self, model: str = DEFAULT_MODEL):
         self.model = model
         self.history: list[dict[str, str]] = []
+        self.last_error: str = ""
 
     def clear_history(self):
         self.history = []
@@ -150,7 +151,7 @@ class ClawAgent:
           - done: final summary stats
           - error: error message
         """
-        llm = OpenRouterClient(model=self.model)
+        llm = LLMClient(model=self.model)
         messages = self._build_messages(user_prompt)
 
         full_assistant_content = []  # accumulate all turns for history
@@ -165,8 +166,17 @@ class ClawAgent:
 
             response_text = llm.chat(messages)
 
-            if not response_text or response_text.startswith("Error"):
-                yield {"type": "error", "message": response_text or "Empty LLM response"}
+            if not response_text:
+                yield {"type": "error", "message": "Empty response from LLM. Please try again."}
+                break
+
+            # Structured error from LLM client (key issues, rate limits, etc.)
+            if response_text.startswith("CLAW_ERROR:"):
+                parts = response_text.split("|", 1)
+                meta = parts[0].replace("CLAW_ERROR:", "")
+                msg = parts[1] if len(parts) > 1 else response_text
+                error_type = meta.split(":")[0] if ":" in meta else "error"
+                yield {"type": "key_error", "error_type": error_type, "message": msg}
                 break
 
             # Parse thinking block

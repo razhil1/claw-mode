@@ -5,7 +5,7 @@ import time
 import threading
 from src.agent import ClawAgent
 from src.toolbox import tool_bash_run, get_workspace_root, tool_file_read, tool_file_edit, tool_file_delete
-from src.llm import CODING_MODELS, DEFAULT_MODEL
+from src.llm import CODING_MODELS, DEFAULT_MODEL, validate_key, set_runtime_key
 
 app = Flask(__name__)
 
@@ -156,6 +156,45 @@ def chat_stream():
             "X-Accel-Buffering": "no",
         }
     )
+
+# ===================== SETTINGS / KEY MANAGEMENT =====================
+@app.route("/api/settings/key-status")
+def key_status():
+    """Return which providers have keys configured."""
+    or_key = os.environ.get("OPENROUTER_API_KEY", "")
+    gr_key = os.environ.get("GROQ_API_KEY", "")
+    # Also check runtime keys
+    from src.llm import _runtime_keys
+    or_key = _runtime_keys.get("openrouter") or or_key
+    gr_key = _runtime_keys.get("groq") or gr_key
+    return jsonify({
+        "openrouter": {"configured": bool(or_key), "prefix": or_key[:15] + "..." if or_key else ""},
+        "groq":       {"configured": bool(gr_key), "prefix": gr_key[:15] + "..." if gr_key else ""},
+    })
+
+@app.route("/api/settings/validate-key", methods=["POST"])
+def api_validate_key():
+    data = request.json
+    provider = data.get("provider", "openrouter")
+    key = data.get("key", "").strip()
+    if not key:
+        return jsonify({"ok": False, "message": "No key provided"}), 400
+    result = validate_key(provider, key)
+    return jsonify(result)
+
+@app.route("/api/settings/set-key", methods=["POST"])
+def api_set_key():
+    """Store an API key in process memory for immediate use (no restart needed)."""
+    data = request.json
+    provider = data.get("provider", "openrouter")
+    key = data.get("key", "").strip()
+    if not key:
+        return jsonify({"ok": False, "message": "No key provided"}), 400
+    set_runtime_key(provider, key)
+    # Also persist to process env so subprocesses see it
+    env_var = "GROQ_API_KEY" if provider == "groq" else "OPENROUTER_API_KEY"
+    os.environ[env_var] = key
+    return jsonify({"ok": True, "message": f"{provider} key saved for this session"})
 
 if __name__ == "__main__":
     print("=" * 50)
