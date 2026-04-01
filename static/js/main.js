@@ -5,7 +5,7 @@ marked.setOptions({ breaks: true, gfm: true });
 
 // ===================== STATE =====================
 const S = {
-    sessionId: generateId(),
+    sessionId: null,
     historyLen: 0,
     turnCount: 0,
     currentFile: null,
@@ -16,35 +16,108 @@ const S = {
     models: {},
     termHistory: [],
     termIdx: -1,
+    allFiles: [],
+    previewActive: false,
+    currentTheme: 'dark',
 };
 
 // ===================== INIT =====================
 document.addEventListener('DOMContentLoaded', () => {
+    // Restore session from localStorage
+    const saved = localStorage.getItem('claw_session_id');
+    S.sessionId = saved || generateId();
+    localStorage.setItem('claw_session_id', S.sessionId);
+
+    // Restore theme
+    const savedTheme = localStorage.getItem('claw_theme') || 'dark';
+    applyTheme(savedTheme);
+
     loadModels();
     loadFiles();
     initResizer();
     initTerminal();
     initEditor();
-    switchTab('preview');
+    checkKeyStatus();
     document.getElementById('prompt').focus();
     updateStats();
+
+    // Global event listeners
     document.addEventListener('click', hideCtxMenu);
     document.getElementById('newFilePath').addEventListener('keydown', e => {
         if (e.key === 'Enter') createNewFile();
         if (e.key === 'Escape') hideNewFileDialog();
     });
-    document.getElementById('prompt').addEventListener('input', function() {
+    document.getElementById('renameInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter') doRename();
+        if (e.key === 'Escape') hideRenameDialog();
+    });
+    const promptEl = document.getElementById('prompt');
+    promptEl.addEventListener('input', function() {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 200) + 'px';
         document.getElementById('charCount').textContent = this.value.length;
     });
-    document.getElementById('prompt').addEventListener('keydown', e => {
+    promptEl.addEventListener('keydown', e => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(); }
+        // Ctrl+L — clear chat
+        if (e.ctrlKey && e.key === 'l') { e.preventDefault(); clearChat(); }
+    });
+
+    // Global keyboard shortcuts
+    document.addEventListener('keydown', e => {
+        // Esc closes modals
+        if (e.key === 'Escape') {
+            hideSettings();
+            hideNewFileDialog();
+            hideRenameDialog();
+        }
+        // Ctrl+/ — focus prompt
+        if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+            e.preventDefault();
+            document.getElementById('prompt').focus();
+        }
+        // Ctrl+Shift+N — new session
+        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'N') {
+            e.preventDefault();
+            newSession();
+        }
     });
 });
 
 function generateId() {
     return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// ===================== THEME =====================
+function toggleTheme() {
+    const newTheme = S.currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(newTheme);
+    localStorage.setItem('claw_theme', newTheme);
+}
+
+function applyTheme(theme) {
+    S.currentTheme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+    const btn = document.getElementById('themeBtn');
+    if (btn) btn.innerHTML = theme === 'dark' ? '<i class="fa-solid fa-moon"></i>' : '<i class="fa-solid fa-sun"></i>';
+    // Swap highlight.js theme
+    const hlLink = document.getElementById('hljs-theme');
+    if (hlLink) {
+        hlLink.href = theme === 'dark'
+            ? 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css'
+            : 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css';
+    }
+}
+
+// ===================== KEY STATUS CHECK =====================
+async function checkKeyStatus() {
+    try {
+        const res = await fetch('/api/settings/key-status');
+        const data = await res.json();
+        const hasKey = data.groq?.configured || data.openrouter?.configured;
+        const hint = document.getElementById('welcomeKeyHint');
+        if (hint) hint.style.display = hasKey ? 'none' : 'flex';
+    } catch {}
 }
 
 // ===================== SIDEBAR =====================
@@ -55,13 +128,15 @@ function toggleSidebar() {
 // ===================== TABS =====================
 function switchTab(tab) {
     ['preview','terminal','editor'].forEach(t => {
-        document.getElementById(t + '-panel').classList.remove('active');
+        const panel = document.getElementById(t + '-panel');
+        if (panel) panel.classList.remove('active');
         const btn = document.getElementById('tab-' + t);
         if (btn) btn.classList.remove('active');
     });
-    document.getElementById(tab + '-panel').classList.add('active');
-    const activeBtn = document.getElementById('tab-' + tab);
-    if (activeBtn) activeBtn.classList.add('active');
+    const panel = document.getElementById(tab + '-panel');
+    if (panel) panel.classList.add('active');
+    const btn = document.getElementById('tab-' + tab);
+    if (btn) btn.classList.add('active');
     if (tab === 'terminal') document.getElementById('terminalInput').focus();
 }
 
@@ -71,27 +146,41 @@ async function loadFiles() {
     try {
         const res = await fetch('/api/files');
         const data = await res.json();
-        const files = data.files || [];
-        document.getElementById('fileCount').textContent = files.length;
-
-        if (!files.length) {
-            list.innerHTML = '<div class="fe-empty">Workspace is empty</div>';
-            return;
-        }
-        list.innerHTML = '';
-        files.forEach(file => {
-            const div = document.createElement('div');
-            div.className = 'fe-item' + (file === S.currentFile ? ' active' : '');
-            div.dataset.file = file;
-            div.title = file;
-            div.innerHTML = `<i class="${fileIcon(file)}"></i><span>${file}</span>`;
-            div.onclick = () => openFileInEditor(file);
-            div.oncontextmenu = (e) => showCtxMenu(e, file);
-            list.appendChild(div);
-        });
+        S.allFiles = data.files || [];
+        document.getElementById('fileCount').textContent = S.allFiles.length;
+        renderFileList(S.allFiles);
     } catch {
         list.innerHTML = '<div class="fe-empty" style="color:var(--red)">Error loading files</div>';
     }
+}
+
+function renderFileList(files) {
+    const list = document.getElementById('fileList');
+    if (!files.length) {
+        list.innerHTML = '<div class="fe-empty">Workspace is empty</div>';
+        return;
+    }
+    list.innerHTML = '';
+    files.forEach(file => {
+        const div = document.createElement('div');
+        div.className = 'fe-item' + (file === S.currentFile ? ' active' : '');
+        div.dataset.file = file;
+        div.title = file;
+        div.innerHTML = `<i class="${fileIcon(file)}"></i><span>${escHtml(file)}</span>`;
+        div.onclick = () => openFileInEditor(file);
+        div.oncontextmenu = (e) => showCtxMenu(e, file);
+        list.appendChild(div);
+    });
+}
+
+function filterFiles(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+        renderFileList(S.allFiles);
+        return;
+    }
+    const filtered = S.allFiles.filter(f => f.toLowerCase().includes(q));
+    renderFileList(filtered);
 }
 
 function fileIcon(name) {
@@ -104,15 +193,66 @@ function fileIcon(name) {
         mjs: 'fa-brands fa-js ic-js',
         ts: 'fa-solid fa-code ic-ts',
         tsx: 'fa-solid fa-code ic-ts',
+        jsx: 'fa-brands fa-react ic-ts',
         py: 'fa-brands fa-python ic-py',
         json: 'fa-solid fa-brackets-curly ic-json',
         md: 'fa-brands fa-markdown ic-md',
         rs: 'fa-solid fa-gear ic-rs',
         txt: 'fa-solid fa-file-lines ic-txt',
         svg: 'fa-regular fa-image',
+        png: 'fa-regular fa-image',
+        jpg: 'fa-regular fa-image',
+        jpeg: 'fa-regular fa-image',
+        gif: 'fa-regular fa-image',
         sh: 'fa-solid fa-terminal',
+        bash: 'fa-solid fa-terminal',
+        toml: 'fa-solid fa-file-code',
+        yaml: 'fa-solid fa-file-code',
+        yml: 'fa-solid fa-file-code',
+        env: 'fa-solid fa-shield',
     };
     return (map[ext] || 'fa-regular fa-file') + ' ';
+}
+
+// ===================== FILE DRAG & DROP =====================
+function onFileDragOver(e) {
+    e.preventDefault();
+    document.getElementById('fileList').classList.add('drag-over');
+    document.getElementById('feDropHint').classList.add('show');
+}
+function onFileDragLeave(e) {
+    document.getElementById('fileList').classList.remove('drag-over');
+    document.getElementById('feDropHint').classList.remove('show');
+}
+async function onFileDrop(e) {
+    e.preventDefault();
+    document.getElementById('fileList').classList.remove('drag-over');
+    document.getElementById('feDropHint').classList.remove('show');
+    const files = e.dataTransfer.files;
+    if (files.length) await uploadFileList(files);
+}
+function triggerUpload() {
+    document.getElementById('uploadInput').click();
+}
+async function handleFileUpload(files) {
+    if (!files.length) return;
+    await uploadFileList(files);
+}
+async function uploadFileList(files) {
+    const fd = new FormData();
+    for (const f of files) fd.append(f.name, f, f.name);
+    try {
+        showToast(`Uploading ${files.length} file(s)...`, 'info');
+        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.uploaded?.length) {
+            await loadFiles();
+            showToast(`Uploaded: ${data.uploaded.join(', ')}`, 'success');
+        }
+        if (data.errors?.length) {
+            data.errors.forEach(e => showToast(`Upload error: ${e.file}`, 'error'));
+        }
+    } catch { showToast('Upload failed', 'error'); }
 }
 
 // ===================== EDITOR =====================
@@ -155,8 +295,6 @@ function onEditorChange() {
         saveBtn.classList.add('unsaved');
         saveBtn.style.display = 'flex';
     }
-    const dot = document.querySelector('.unsaved-dot');
-    if (dot) dot.classList.add('show');
     syncLineNumbers();
 }
 
@@ -188,19 +326,17 @@ async function openFileInEditor(filepath) {
         ta.value = content;
         syncLineNumbers();
 
-        const fn = document.getElementById('editorFilename');
-        fn.textContent = filepath;
+        document.getElementById('editorFilename').textContent = filepath;
 
         const saveBtn = document.getElementById('saveBtn');
         saveBtn.style.display = 'flex';
         saveBtn.classList.remove('unsaved');
 
-        const langEl = document.getElementById('editorLang');
-        const langs = { js:'JavaScript', ts:'TypeScript', py:'Python', html:'HTML', css:'CSS', json:'JSON', md:'Markdown', rs:'Rust', sh:'Shell' };
-        langEl.textContent = langs[ext] || ext.toUpperCase();
+        const langs = { js:'JavaScript', ts:'TypeScript', jsx:'JSX', tsx:'TSX', py:'Python', html:'HTML', css:'CSS', json:'JSON', md:'Markdown', rs:'Rust', sh:'Shell', toml:'TOML', yaml:'YAML', yml:'YAML' };
+        document.getElementById('editorLang').textContent = langs[ext] || ext.toUpperCase();
 
         switchTab('editor');
-    } catch (e) {
+    } catch {
         showToast('Could not open file', 'error');
     }
 }
@@ -239,6 +375,46 @@ function closeEditor() {
     switchTab('preview');
 }
 
+// ===================== RENAME =====================
+function ctxRename() {
+    if (!S.ctxFile) return;
+    document.getElementById('renameModal').classList.add('open');
+    const inp = document.getElementById('renameInput');
+    inp.value = S.ctxFile.split('/').pop();
+    inp.focus();
+    inp.select();
+}
+function hideRenameDialog(e) {
+    if (e && e.target !== document.getElementById('renameModal')) return;
+    document.getElementById('renameModal').classList.remove('open');
+}
+async function doRename() {
+    const newName = document.getElementById('renameInput').value.trim();
+    if (!newName || !S.ctxFile) return;
+    const dir = S.ctxFile.includes('/') ? S.ctxFile.split('/').slice(0,-1).join('/') + '/' : '';
+    const newPath = dir + newName;
+    try {
+        // Read old file content
+        const readRes = await fetch('/api/file/' + S.ctxFile);
+        const readData = await readRes.json();
+        // Write to new path
+        await fetch('/api/file/' + newPath, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: readData.content })
+        });
+        // Delete old file
+        await fetch('/api/file/' + S.ctxFile, { method: 'DELETE' });
+        document.getElementById('renameModal').classList.remove('open');
+        if (S.currentFile === S.ctxFile) {
+            S.currentFile = newPath;
+            document.getElementById('editorFilename').textContent = newPath;
+        }
+        await loadFiles();
+        showToast(`Renamed to ${newPath}`, 'success');
+    } catch { showToast('Rename failed', 'error'); }
+}
+
 // ===================== NEW FILE DIALOG =====================
 function showNewFileDialog() {
     document.getElementById('newFileModal').classList.add('open');
@@ -270,8 +446,15 @@ function showCtxMenu(e, file) {
     e.preventDefault();
     S.ctxFile = file;
     const m = document.getElementById('ctxMenu');
-    m.style.top = e.clientY + 'px';
-    m.style.left = e.clientX + 'px';
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let x = e.clientX, y = e.clientY;
+    m.style.display = 'block';
+    const mw = m.offsetWidth, mh = m.offsetHeight;
+    m.style.display = '';
+    if (x + mw > vw) x = vw - mw - 4;
+    if (y + mh > vh) y = vh - mh - 4;
+    m.style.top = y + 'px';
+    m.style.left = x + 'px';
     m.classList.add('open');
 }
 function hideCtxMenu() { document.getElementById('ctxMenu').classList.remove('open'); }
@@ -297,7 +480,10 @@ async function ctxDelete() {
 function refreshBrowser() {
     const frame = document.getElementById('previewFrame');
     const url = document.getElementById('browserUrl').value;
-    frame.src = frame.src === url ? (frame.src = '', url) : url;
+    frame.src = '';
+    setTimeout(() => { frame.src = url; }, 30);
+    document.getElementById('previewEmpty').classList.add('hidden');
+    S.previewActive = true;
 }
 function openInNewTab() { window.open(document.getElementById('browserUrl').value, '_blank'); }
 
@@ -309,6 +495,7 @@ function initTerminal() {
             const cmd = inp.value.trim();
             if (!cmd) return;
             S.termHistory.unshift(cmd);
+            if (S.termHistory.length > 100) S.termHistory.pop();
             S.termIdx = -1;
             inp.value = '';
             await runTerminalCommand(cmd);
@@ -346,6 +533,11 @@ async function runTerminalCommand(cmd) {
     out.scrollTop = out.scrollHeight;
     switchTab('terminal');
 
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'cmd-output';
+    loadingDiv.textContent = '...';
+    out.appendChild(loadingDiv);
+
     try {
         const res = await fetch('/api/terminal', {
             method: 'POST',
@@ -353,15 +545,10 @@ async function runTerminalCommand(cmd) {
             body: JSON.stringify({ command: cmd })
         });
         const data = await res.json();
-        const outDiv = document.createElement('div');
-        outDiv.className = 'cmd-output';
-        outDiv.textContent = data.output || '';
-        out.appendChild(outDiv);
+        loadingDiv.textContent = data.output || '(no output)';
     } catch {
-        const errDiv = document.createElement('div');
-        errDiv.className = 'cmd-error';
-        errDiv.textContent = 'Error: server unreachable';
-        out.appendChild(errDiv);
+        loadingDiv.className = 'cmd-error';
+        loadingDiv.textContent = 'Error: server unreachable';
     }
     out.scrollTop = out.scrollHeight;
     await loadFiles();
@@ -369,7 +556,7 @@ async function runTerminalCommand(cmd) {
 
 function clearTerminal() {
     document.getElementById('terminalOutput').innerHTML =
-        '<div class="term-welcome">Terminal cleared</div>';
+        '<div class="term-welcome">Terminal cleared — commands run inside <strong>agent_workspace/</strong></div>';
 }
 
 // ===================== MODELS =====================
@@ -381,36 +568,54 @@ async function loadModels() {
         const res = await fetch('/api/models');
         const data = await res.json();
         sel.innerHTML = '';
-        const groups = { free: [], paid: [] };
+        const groups = {};
         data.models.forEach(m => {
             S.models[m.id] = m;
-            groups[m.tier] = groups[m.tier] || [];
-            groups[m.tier].push(m);
+            const key = m.provider + '_' + m.tier;
+            groups[key] = groups[key] || [];
+            groups[key].push(m);
         });
-        const makeGroup = (label, models) => {
-            const g = document.createElement('optgroup');
-            g.label = label;
-            models.forEach(m => {
-                const o = document.createElement('option');
-                o.value = m.id;
-                o.textContent = m.label;
-                if (m.active) o.selected = true;
-                g.appendChild(o);
-            });
-            return g;
-        };
-        if (groups.free?.length) sel.appendChild(makeGroup('✦ Free Models', groups.free));
-        if (groups.paid?.length) sel.appendChild(makeGroup('★ Premium Models', groups.paid));
+
+        const groupOrder = [
+            { key: 'groq_free',       label: '⚡ Groq — Free' },
+            { key: 'openrouter_free', label: '✦ OpenRouter — Free' },
+            { key: 'openrouter_paid', label: '★ OpenRouter — Premium' },
+        ];
+        for (const { key, label } of groupOrder) {
+            if (groups[key]?.length) {
+                const g = document.createElement('optgroup');
+                g.label = label;
+                groups[key].forEach(m => {
+                    const o = document.createElement('option');
+                    o.value = m.id;
+                    o.textContent = m.label;
+                    if (m.active) o.selected = true;
+                    g.appendChild(o);
+                });
+                sel.appendChild(g);
+            }
+        }
 
         const active = S.models[data.active];
-        if (active) {
-            desc.textContent = active.description;
-            tier.textContent = active.tier === 'free' ? '✦ Free · ' + fmtCtx(active.context) : '★ Premium · ' + fmtCtx(active.context);
-            tier.style.color = active.tier === 'free' ? 'var(--green)' : 'var(--yellow)';
-        }
+        if (active) updateModelInfo(active);
+        updateProviderLabel(active?.provider || 'groq');
     } catch {
         sel.innerHTML = '<option>Error loading models</option>';
     }
+}
+
+function updateModelInfo(m) {
+    document.getElementById('modelDesc').textContent = m.description;
+    const tier = document.getElementById('modelTier');
+    tier.textContent = m.tier === 'free'
+        ? '✦ Free · ' + fmtCtx(m.context)
+        : '★ Premium · ' + fmtCtx(m.context);
+    tier.style.color = m.tier === 'free' ? 'var(--green)' : 'var(--yellow)';
+}
+
+function updateProviderLabel(provider) {
+    const el = document.getElementById('activeProvider');
+    if (el) el.textContent = provider === 'groq' ? 'Groq' : 'OpenRouter';
 }
 
 function fmtCtx(n) {
@@ -423,10 +628,8 @@ async function switchModel(modelId) {
     if (!modelId) return;
     const m = S.models[modelId];
     if (m) {
-        document.getElementById('modelDesc').textContent = m.description;
-        const tier = document.getElementById('modelTier');
-        tier.textContent = m.tier === 'free' ? '✦ Free · ' + fmtCtx(m.context) : '★ Premium · ' + fmtCtx(m.context);
-        tier.style.color = m.tier === 'free' ? 'var(--green)' : 'var(--yellow)';
+        updateModelInfo(m);
+        updateProviderLabel(m.provider);
     }
     try {
         await fetch('/api/model', {
@@ -434,7 +637,7 @@ async function switchModel(modelId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ model: modelId })
         });
-        showToast('Model switched', 'info');
+        showToast(`Switched to ${m?.label || modelId}`, 'info');
     } catch { showToast('Error switching model', 'error'); }
 }
 
@@ -455,6 +658,7 @@ async function newSession() {
         await fetch(`/api/session/${S.sessionId}/clear`, { method: 'POST' });
     } catch {}
     S.sessionId = generateId();
+    localStorage.setItem('claw_session_id', S.sessionId);
     S.historyLen = 0;
     S.turnCount = 0;
     clearChat();
@@ -465,6 +669,18 @@ async function newSession() {
 function updateStats() {
     document.getElementById('historyCount').textContent = S.historyLen;
     document.getElementById('turnCounter').textContent = S.turnCount + ' turn' + (S.turnCount !== 1 ? 's' : '');
+}
+
+// ===================== STOP AGENT =====================
+async function stopAgent() {
+    try {
+        await fetch('/api/chat/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: S.sessionId })
+        });
+        showToast('Stop signal sent', 'warning');
+    } catch { showToast('Could not send stop signal', 'error'); }
 }
 
 // ===================== SEND PROMPT =====================
@@ -481,7 +697,6 @@ async function sendPrompt() {
     setAgentStatus('yellow', 'Working...');
     showStepBar('Initializing agent...');
 
-    // Create agent message bubble
     const agentBubble = createAgentBubble();
     const contentDiv = agentBubble.querySelector('.agent-content');
 
@@ -512,22 +727,107 @@ async function sendPrompt() {
                 if (raw === '[DONE]') break;
                 try {
                     const evt = JSON.parse(raw);
-                    handleStreamEvent(evt, contentDiv, () => accumulatedText, (t) => { accumulatedText = t; }, (n) => { toolCalls = n; return toolCalls; }, toolCalls);
-                    if (evt.type === 'thinking') {
-                        showStepBar(evt.text.length > 60 ? evt.text.slice(0, 60) + '...' : evt.text);
+
+                    if (evt.type === 'thinking' && evt.text) {
+                        if (evt.text.length > 20 && !evt.text.startsWith('Thinking (turn')) {
+                            showStepBar(evt.text.length > 70 ? evt.text.slice(0, 70) + '...' : evt.text);
+                            let tb = contentDiv.querySelector('.thought-block');
+                            if (!tb) {
+                                tb = document.createElement('div');
+                                tb.className = 'thought-block';
+                                tb.innerHTML = `<div class="thought-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'"><i class="fa-solid fa-brain"></i> Reasoning <i class="fa-solid fa-chevron-down" style="margin-left:auto"></i></div><div class="thought-content"></div>`;
+                                contentDiv.appendChild(tb);
+                            }
+                            tb.querySelector('.thought-content').textContent = evt.text;
+                        } else if (evt.text.startsWith('Thinking (turn')) {
+                            showStepBar(evt.text);
+                        }
                     }
-                    if (evt.type === 'tool_call') {
+
+                    else if (evt.type === 'tool_call') {
                         toolCalls++;
+                        const step = document.createElement('div');
+                        step.className = 'tool-step';
+                        const toolIcon = toolIcons[evt.tool] || 'fa-solid fa-wrench';
+                        const shortPayload = (evt.payload || '').replace(/\n/g, ' ').slice(0, 90);
+                        step.innerHTML = `
+                            <div class="tool-step-icon"><i class="${toolIcon}"></i></div>
+                            <div class="tool-step-body">
+                                <div class="tool-step-title"><span class="tool-badge-name">${escHtml(evt.tool)}</span></div>
+                                <div class="tool-step-detail">${escHtml(shortPayload)}</div>
+                            </div>`;
+                        contentDiv.appendChild(step);
                         showStepBar(`Running ${evt.tool}...`);
                         S.turnCount++;
                         updateStats();
+                        scrollBottom();
                     }
-                    if (evt.type === 'done') {
+
+                    else if (evt.type === 'tool_result') {
+                        const steps = contentDiv.querySelectorAll('.tool-step:not(.result)');
+                        const lastStep = steps[steps.length - 1];
+                        if (lastStep) {
+                            lastStep.classList.add('result');
+                            lastStep.querySelector('.tool-step-icon i').className = 'fa-solid fa-check';
+                            const detail = lastStep.querySelector('.tool-step-detail');
+                            if (detail) {
+                                const first = (evt.result || '').split('\n')[0].slice(0, 80);
+                                detail.textContent = (evt.elapsed ? `(${evt.elapsed}s) ` : '') + first;
+                            }
+                        }
+                    }
+
+                    else if (evt.type === 'token') {
+                        accumulatedText = (accumulatedText + '\n\n' + evt.text).trim();
+                        updateStreamingText(contentDiv, accumulatedText);
+                        scrollBottom();
+                    }
+
+                    else if (evt.type === 'error') {
+                        const errDiv = document.createElement('div');
+                        errDiv.className = 'tool-step error-step';
+                        errDiv.innerHTML = `<div class="tool-step-icon"><i class="fa-solid fa-circle-exclamation"></i></div><div class="tool-step-body"><div class="tool-step-title">Error</div><div class="tool-step-detail">${escHtml(evt.message)}</div></div>`;
+                        contentDiv.appendChild(errDiv);
+                        scrollBottom();
+                    }
+
+                    else if (evt.type === 'key_error') {
+                        const banner = document.createElement('div');
+                        banner.className = 'key-error-banner';
+                        const providerName = evt.error_type?.includes('groq') ? 'Groq' : 'OpenRouter';
+                        let linkHtml = '';
+                        if (evt.error_type?.includes('NO_KEY') || evt.error_type?.includes('BAD_KEY')) {
+                            const url = evt.error_type?.includes('groq') ? 'https://console.groq.com/keys' : 'https://openrouter.ai/keys';
+                            linkHtml = ` <a href="${url}" target="_blank">Get a key →</a> or <button onclick="showSettings()">Open Settings</button>`;
+                        }
+                        banner.innerHTML = `<i class="fa-solid fa-key"></i><div><strong>API Key Issue (${providerName})</strong><br>${escHtml(evt.message)}${linkHtml}</div>`;
+                        contentDiv.appendChild(banner);
+                        // Auto-open settings for missing/bad key
+                        if (evt.error_type?.includes('NO_KEY') || evt.error_type?.includes('BAD_KEY')) {
+                            setTimeout(() => showSettings(), 600);
+                        }
+                        scrollBottom();
+                    }
+
+                    else if (evt.type === 'stopped') {
+                        const banner = document.createElement('div');
+                        banner.className = 'stopped-banner';
+                        banner.innerHTML = `<i class="fa-solid fa-stop"></i> Agent stopped after ${evt.turns || 0} turn(s).`;
+                        contentDiv.appendChild(banner);
+                        scrollBottom();
+                    }
+
+                    else if (evt.type === 'done') {
                         S.historyLen = evt.history_len || S.historyLen + 1;
                         if (evt.files_changed?.length) {
                             await loadFiles();
                             highlightChangedFiles(evt.files_changed);
-                            setTimeout(refreshBrowser, 500);
+                            // Auto-navigate to first HTML file
+                            const htmlFile = evt.files_changed.find(f => f.endsWith('.html'));
+                            if (htmlFile) {
+                                document.getElementById('browserUrl').value = '/workspace/' + htmlFile;
+                                setTimeout(refreshBrowser, 500);
+                            }
                         }
                         updateStats();
                     }
@@ -535,7 +835,6 @@ async function sendPrompt() {
             }
         }
 
-        // Finalize bubble
         finalizeAgentBubble(contentDiv, accumulatedText);
 
     } catch (err) {
@@ -546,60 +845,6 @@ async function sendPrompt() {
         hideStepBar();
         scrollBottom();
     }
-}
-
-function handleStreamEvent(evt, contentDiv, getText, setText, incTools, toolCount) {
-    if (evt.type === 'thinking') {
-        // Show as a thought block if substantial
-        if (evt.text && evt.text.length > 20 && !evt.text.startsWith('Thinking (turn')) {
-            let tb = contentDiv.querySelector('.thought-block');
-            if (!tb) {
-                tb = document.createElement('div');
-                tb.className = 'thought-block';
-                tb.innerHTML = `<div class="thought-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'"><i class="fa-solid fa-brain"></i> Reasoning</div><div class="thought-content"></div>`;
-                contentDiv.appendChild(tb);
-            }
-            tb.querySelector('.thought-content').textContent = evt.text;
-        }
-    }
-    else if (evt.type === 'tool_call') {
-        const step = document.createElement('div');
-        step.className = 'tool-step';
-        const toolIcon = toolIcons[evt.tool] || 'fa-solid fa-wrench';
-        step.innerHTML = `
-            <div class="tool-step-icon"><i class="${toolIcon}"></i></div>
-            <div class="tool-step-body">
-                <div class="tool-step-title"><span class="tool-badge-name">${escHtml(evt.tool)}</span></div>
-                <div class="tool-step-detail">${escHtml((evt.payload || '').slice(0, 80))}</div>
-            </div>`;
-        contentDiv.appendChild(step);
-        scrollBottom();
-    }
-    else if (evt.type === 'tool_result') {
-        const steps = contentDiv.querySelectorAll('.tool-step:not(.result)');
-        const lastStep = steps[steps.length - 1];
-        if (lastStep) {
-            lastStep.classList.add('result');
-            lastStep.querySelector('.tool-step-icon i').className = 'fa-solid fa-check';
-            const detail = lastStep.querySelector('.tool-step-detail');
-            if (detail) {
-                const first = (evt.result || '').split('\n')[0].slice(0, 70);
-                detail.textContent = (evt.elapsed ? `(${evt.elapsed}s) ` : '') + first;
-            }
-        }
-    }
-    else if (evt.type === 'token') {
-        const newText = getText() + '\n\n' + evt.text;
-        setText(newText.trim());
-        updateStreamingText(contentDiv, newText.trim());
-    }
-    else if (evt.type === 'error') {
-        const errDiv = document.createElement('div');
-        errDiv.className = 'tool-step error-step';
-        errDiv.innerHTML = `<div class="tool-step-icon"><i class="fa-solid fa-circle-exclamation"></i></div><div class="tool-step-body"><div class="tool-step-title">Error</div><div class="tool-step-detail">${escHtml(evt.message)}</div></div>`;
-        contentDiv.appendChild(errDiv);
-    }
-    scrollBottom();
 }
 
 const toolIcons = {
@@ -623,18 +868,17 @@ function updateStreamingText(contentDiv, text) {
 }
 
 function finalizeAgentBubble(contentDiv, text) {
-    // Remove streaming cursor, apply full markdown
     const textDiv = contentDiv.querySelector('.streamed-text');
     if (textDiv) {
         textDiv.classList.remove('streaming-cursor');
-        textDiv.innerHTML = marked.parse(text || '');
+        if (text) textDiv.innerHTML = marked.parse(text);
     } else if (text) {
         const d = document.createElement('div');
         d.className = 'streamed-text';
         d.innerHTML = marked.parse(text);
         contentDiv.appendChild(d);
     }
-    // Add copy buttons to code blocks
+    // Add copy buttons and syntax highlight
     contentDiv.querySelectorAll('pre').forEach(pre => {
         if (!pre.querySelector('.copy-btn')) {
             const btn = document.createElement('button');
@@ -662,8 +906,7 @@ function createAgentBubble() {
     d.appendChild(inner);
     document.getElementById('chat').appendChild(d);
     scrollBottom();
-
-    setTimeout(() => { typingEl.remove(); }, 600);
+    setTimeout(() => { typingEl.remove(); }, 800);
     return d;
 }
 
@@ -672,8 +915,10 @@ function setAgentRunning(running) {
     S.isAgentRunning = running;
     const btn = document.getElementById('sendBtn');
     const inp = document.getElementById('prompt');
+    const stopBtn = document.getElementById('stopBtn');
     btn.disabled = running;
     inp.disabled = running;
+    if (stopBtn) stopBtn.style.display = running ? 'flex' : 'none';
 }
 
 function setAgentStatus(color, text) {
@@ -704,7 +949,7 @@ function clearChat() {
     chat.innerHTML = '';
     const wc = document.createElement('div');
     wc.className = 'welcome-card';
-    wc.innerHTML = `<div class="welcome-icon">⚡</div><h2>New Session</h2><p>Ready for your next project. What should I build?</p>`;
+    wc.innerHTML = `<div class="welcome-icon">⚡</div><h2>New Session</h2><p>Ready for your next project. What should I build?</p><div class="welcome-tips"><span>💡 Try a Quick Start template</span></div>`;
     chat.appendChild(wc);
 }
 
@@ -719,12 +964,16 @@ function escHtml(s) {
 }
 
 function copyCode(btn) {
-    const code = btn.closest('pre').querySelector('code');
-    navigator.clipboard.writeText(code.innerText).then(() => {
+    const pre = btn.closest('pre');
+    const code = pre.querySelector('code') || pre;
+    const text = code.innerText || code.textContent;
+    navigator.clipboard.writeText(text).then(() => {
         const orig = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
         btn.style.color = 'var(--green)';
         setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
+    }).catch(() => {
+        showToast('Copy failed', 'error');
     });
 }
 
@@ -733,9 +982,87 @@ function highlightChangedFiles(files) {
         const el = document.querySelector(`.fe-item[data-file="${f}"]`);
         if (el) {
             el.classList.add('changed');
-            setTimeout(() => el.classList.remove('changed'), 4000);
+            setTimeout(() => el.classList.remove('changed'), 5000);
         }
     });
+}
+
+// ===================== SETTINGS =====================
+function showSettings() {
+    document.getElementById('settingsModal').classList.add('open');
+    // Pre-fill key status
+    fetch('/api/settings/key-status').then(r => r.json()).then(data => {
+        if (data.groq?.configured) {
+            const s = document.getElementById('groqKeyStatus');
+            s.className = 'key-status ok';
+            s.textContent = `✓ Configured (${data.groq.prefix})`;
+        }
+        if (data.openrouter?.configured) {
+            const s = document.getElementById('orKeyStatus');
+            s.className = 'key-status ok';
+            s.textContent = `✓ Configured (${data.openrouter.prefix})`;
+        }
+    }).catch(() => {});
+}
+function hideSettings(e) {
+    if (e && e.target !== document.getElementById('settingsModal')) return;
+    document.getElementById('settingsModal').classList.remove('open');
+}
+
+async function saveAndValidateKey(provider) {
+    const input = document.getElementById(provider === 'groq' ? 'groqKeyInput' : 'orKeyInput');
+    const statusEl = document.getElementById(provider === 'groq' ? 'groqKeyStatus' : 'orKeyStatus');
+    const key = input.value.trim();
+    if (!key) { statusEl.className = 'key-status err'; statusEl.textContent = 'Please enter a key'; return; }
+
+    statusEl.className = 'key-status loading';
+    statusEl.textContent = 'Saving & testing...';
+
+    try {
+        // Save the key
+        await fetch('/api/settings/set-key', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider, key })
+        });
+        // Validate it
+        const res = await fetch('/api/settings/validate-key', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider, key })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            statusEl.className = 'key-status ok';
+            statusEl.textContent = '✓ ' + data.message;
+            input.value = '';
+            showToast(`${provider} key saved & verified`, 'success');
+            checkKeyStatus();
+        } else {
+            statusEl.className = 'key-status err';
+            statusEl.textContent = '✗ ' + data.message;
+        }
+    } catch {
+        statusEl.className = 'key-status err';
+        statusEl.textContent = 'Connection error';
+    }
+}
+
+// ===================== EXPORT CHAT =====================
+function exportChat() {
+    const msgs = document.querySelectorAll('#chat .message');
+    let text = '# Claw IDE — Chat Export\n\n';
+    text += `Date: ${new Date().toLocaleString()}\n\n---\n\n`;
+    msgs.forEach(m => {
+        const role = m.classList.contains('user') ? '**User**' : '**Agent**';
+        text += `## ${role}\n${m.innerText}\n\n---\n\n`;
+    });
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'claw-chat-' + new Date().toISOString().slice(0,10) + '.md';
+    a.click();
+    showToast('Chat exported', 'success');
 }
 
 // ===================== TOAST =====================
@@ -751,23 +1078,7 @@ function showToast(msg, type = 'info') {
     t.className = 'toast ' + type;
     t.textContent = msg;
     toastContainer.appendChild(t);
-    setTimeout(() => t.remove(), 3000);
-}
-
-// ===================== EXPORT CHAT =====================
-function exportChat() {
-    const msgs = document.querySelectorAll('#chat .message');
-    let text = '# Claw IDE Chat Export\n\n';
-    msgs.forEach(m => {
-        const role = m.classList.contains('user') ? 'User' : 'Agent';
-        text += `## ${role}\n${m.innerText}\n\n`;
-    });
-    const blob = new Blob([text], { type: 'text/markdown' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'claw-chat-' + Date.now() + '.md';
-    a.click();
-    showToast('Chat exported', 'success');
+    setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 3000);
 }
 
 // ===================== RESIZABLE PANES =====================
@@ -776,7 +1087,8 @@ function initResizer() {
     const chatSec = document.getElementById('chatSection');
     let dragging = false;
 
-    handle.addEventListener('mousedown', () => {
+    handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
         dragging = true;
         handle.classList.add('active');
         document.body.style.cursor = 'col-resize';
@@ -784,9 +1096,12 @@ function initResizer() {
     });
     document.addEventListener('mousemove', e => {
         if (!dragging) return;
-        const rect = handle.parentElement.getBoundingClientRect();
-        const newW = e.clientX - rect.left;
-        if (newW >= 280 && newW <= rect.width - 240) {
+        const sidebar = document.getElementById('sidebar');
+        const sidebarW = sidebar.classList.contains('collapsed') ? 0 : sidebar.offsetWidth;
+        const newW = e.clientX - sidebarW;
+        const wrapper = document.querySelector('.main-wrapper');
+        const totalW = wrapper.offsetWidth;
+        if (newW >= 280 && newW <= totalW - 220) {
             chatSec.style.flex = 'none';
             chatSec.style.width = newW + 'px';
         }

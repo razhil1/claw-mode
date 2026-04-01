@@ -5,7 +5,6 @@ import urllib.error
 from typing import List, Dict
 
 # ===================== RUNTIME KEY STORE (in-memory override) =====================
-# Keys set here override env vars for the current server process
 _runtime_keys: dict[str, str] = {}
 
 def set_runtime_key(provider: str, key: str):
@@ -28,7 +27,7 @@ OPENROUTER_MODELS = {
     },
     "qwen/qwen-2.5-coder-32b-instruct:free": {
         "label": "Qwen 2.5 Coder 32B (Free)",
-        "description": "State-of-the-art open-source coding model.",
+        "description": "State-of-the-art open-source coding model by Alibaba.",
         "context": 32768, "tier": "free", "provider": "openrouter",
     },
     "google/gemini-2.0-flash-thinking-exp:free": {
@@ -36,19 +35,39 @@ OPENROUTER_MODELS = {
         "description": "Google's fast reasoning model with visible thought process.",
         "context": 32767, "tier": "free", "provider": "openrouter",
     },
-    "google/gemini-2.0-pro-exp-02-05:free": {
-        "label": "Gemini 2.0 Pro Exp (Free)",
-        "description": "Google's experimental high-reasoning model. Huge 1M context.",
+    "google/gemini-2.5-pro-exp-03-25:free": {
+        "label": "Gemini 2.5 Pro Exp (Free)",
+        "description": "Google's latest frontier model. Incredible 1M context window.",
         "context": 1000000, "tier": "free", "provider": "openrouter",
+    },
+    "meta-llama/llama-4-maverick:free": {
+        "label": "Llama 4 Maverick (Free)",
+        "description": "Meta's newest model. Strong coding and reasoning capabilities.",
+        "context": 524288, "tier": "free", "provider": "openrouter",
+    },
+    "microsoft/phi-4:free": {
+        "label": "Microsoft Phi-4 (Free)",
+        "description": "Microsoft's compact but powerful model. Excellent for code.",
+        "context": 16384, "tier": "free", "provider": "openrouter",
     },
     "anthropic/claude-3.5-sonnet": {
         "label": "Claude 3.5 Sonnet ★",
         "description": "Gold standard for coding. Best for architecture & multi-file edits.",
         "context": 200000, "tier": "paid", "provider": "openrouter",
     },
+    "anthropic/claude-3.5-haiku": {
+        "label": "Claude 3.5 Haiku ★",
+        "description": "Fast and affordable Claude. Great for iterative coding tasks.",
+        "context": 200000, "tier": "paid", "provider": "openrouter",
+    },
     "openai/gpt-4o": {
         "label": "GPT-4o ★",
         "description": "OpenAI's flagship model. Excellent reasoning and code.",
+        "context": 128000, "tier": "paid", "provider": "openrouter",
+    },
+    "openai/gpt-4o-mini": {
+        "label": "GPT-4o Mini ★",
+        "description": "Fast, affordable GPT-4 class model. Great for quick tasks.",
         "context": 128000, "tier": "paid", "provider": "openrouter",
     },
 }
@@ -84,6 +103,12 @@ GROQ_MODELS = {
         "description": "DeepSeek's reasoning model distilled into Llama 70B. Very fast on Groq.",
         "context": 128000, "tier": "free", "provider": "groq",
         "groq_id": "deepseek-r1-distill-llama-70b",
+    },
+    "groq:llama-3.3-70b-specdec": {
+        "label": "Llama 3.3 70B SpecDec (Groq Free)",
+        "description": "Llama 3.3 70B with speculative decoding — even faster token generation.",
+        "context": 8192, "tier": "free", "provider": "groq",
+        "groq_id": "llama-3.3-70b-specdec",
     },
 }
 
@@ -132,7 +157,7 @@ class LLMClient:
             return (
                 "CLAW_ERROR:NO_KEY:groq|"
                 "No Groq API key found. Get a free key at https://console.groq.com "
-                "and add it as GROQ_API_KEY in Settings."
+                "and add it in the ⚙ Settings panel."
             )
 
         body = {
@@ -159,11 +184,13 @@ class LLMClient:
             if e.code == 401:
                 return (
                     "CLAW_ERROR:BAD_KEY:groq|"
-                    f"Invalid Groq API key (401). Please update it in Settings. Detail: {body_text}"
+                    f"Invalid Groq API key (401). Please update it in ⚙ Settings. Detail: {body_text[:200]}"
                 )
             if e.code == 429:
-                return "CLAW_ERROR:RATE_LIMIT:groq|Groq rate limit hit. Wait a moment and try again."
-            return f"Groq HTTP {e.code}: {body_text}"
+                return "CLAW_ERROR:RATE_LIMIT:groq|Groq rate limit hit. Try a different model or wait a moment."
+            if e.code == 503:
+                return "CLAW_ERROR:SERVER_ERROR:groq|Groq service temporarily unavailable. Try again in a few seconds."
+            return f"Groq HTTP {e.code}: {body_text[:300]}"
         except Exception as e:
             return f"Groq connection error: {str(e)}"
 
@@ -173,7 +200,7 @@ class LLMClient:
             return (
                 "CLAW_ERROR:NO_KEY:openrouter|"
                 "No OpenRouter API key found. Get a free key at https://openrouter.ai/keys "
-                "and add it in Settings."
+                "and add it in the ⚙ Settings panel."
             )
 
         body = {
@@ -202,12 +229,16 @@ class LLMClient:
             if e.code == 401:
                 return (
                     "CLAW_ERROR:BAD_KEY:openrouter|"
-                    f"Invalid OpenRouter API key (401 — User not found). "
-                    "Please create a fresh key at https://openrouter.ai/keys and add it in Settings."
+                    f"Invalid OpenRouter API key (401). "
+                    "Please create a fresh key at https://openrouter.ai/keys and add it in ⚙ Settings."
                 )
+            if e.code == 402:
+                return "CLAW_ERROR:NO_CREDITS:openrouter|Insufficient credits. Add credits at https://openrouter.ai or switch to a free model."
             if e.code == 429:
                 return "CLAW_ERROR:RATE_LIMIT:openrouter|OpenRouter rate limit hit. Try switching to a different model."
-            return f"OpenRouter HTTP {e.code}: {body_text}"
+            if e.code == 503:
+                return "CLAW_ERROR:SERVER_ERROR:openrouter|OpenRouter service temporarily unavailable. Try again shortly."
+            return f"OpenRouter HTTP {e.code}: {body_text[:300]}"
         except Exception as e:
             return f"OpenRouter connection error: {str(e)}"
 
@@ -225,7 +256,6 @@ def validate_key(provider: str, key: str) -> dict:
                 count = len(data.get("data", []))
                 return {"ok": True, "message": f"Groq key valid — {count} models available"}
         else:
-            # OpenRouter: test with a tiny chat request instead of models endpoint
             body = json.dumps({
                 "model": "openrouter/auto",
                 "messages": [{"role": "user", "content": "Hi"}],
@@ -259,5 +289,5 @@ def validate_key(provider: str, key: str) -> dict:
         return {"ok": False, "message": f"Connection error: {str(ex)}"}
 
 
-# Backwards-compatible alias used by legacy code
+# Backwards-compatible alias
 OpenRouterClient = LLMClient

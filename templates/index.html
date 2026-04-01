@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Claw IDE — AI Coding Agent</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-theme">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="/static/css/style.css">
@@ -18,7 +18,11 @@
         <div class="logo-row">
             <span class="logo-icon">⚡</span>
             <span class="logo-text">Claw IDE</span>
-            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar"><i class="fa-solid fa-bars"></i></button>
+            <div class="logo-actions">
+                <button onclick="toggleTheme()" title="Toggle theme" id="themeBtn"><i class="fa-solid fa-moon"></i></button>
+                <button onclick="showSettings()" title="API Key Settings"><i class="fa-solid fa-gear"></i></button>
+                <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar"><i class="fa-solid fa-bars"></i></button>
+            </div>
         </div>
         <div class="status-row">
             <span class="badge-green"><i class="fa-solid fa-circle"></i> Agent Online</span>
@@ -47,12 +51,14 @@
     <div class="sidebar-section">
         <div class="section-label"><i class="fa-solid fa-bolt"></i> Quick Start</div>
         <div class="quick-actions">
-            <button onclick="quickPrompt('Build a modern landing page with hero section, features, and footer using dark glassmorphism design')">🌐 Landing Page</button>
-            <button onclick="quickPrompt('Create a real-time todo app with local storage, priorities, tags, and smooth animations')">✅ Todo App</button>
-            <button onclick="quickPrompt('Build a beautiful calculator with keyboard support and history log')">🧮 Calculator</button>
-            <button onclick="quickPrompt('Create a weather dashboard UI with city search, animated weather icons, and forecast cards')">🌤️ Weather UI</button>
-            <button onclick="quickPrompt('Build a markdown editor with live preview, toolbar, and syntax highlighting')">📝 MD Editor</button>
-            <button onclick="quickPrompt('Create a REST API with Flask: endpoints for users, auth (JWT), and CRUD operations')">🔌 Flask API</button>
+            <button onclick="quickPrompt('Build a stunning modern landing page with hero, animated features section, testimonials, and footer using dark glassmorphism design')">🌐 Landing Page</button>
+            <button onclick="quickPrompt('Create a real-time todo app with local storage, drag-to-reorder, priorities, tags, and smooth animations')">✅ Todo App</button>
+            <button onclick="quickPrompt('Build a beautiful calculator with scientific mode, keyboard support, history log, and smooth animations')">🧮 Calculator</button>
+            <button onclick="quickPrompt('Create an interactive portfolio website with animated hero, projects grid, skills section, and contact form')">🎨 Portfolio</button>
+            <button onclick="quickPrompt('Build a markdown editor with live split-pane preview, toolbar with formatting buttons, and export feature')">📝 MD Editor</button>
+            <button onclick="quickPrompt('Create a kanban board with drag-and-drop columns, cards with priorities, and local storage persistence')">📋 Kanban Board</button>
+            <button onclick="quickPrompt('Build a REST API with Flask: /users, /auth (JWT), and full CRUD with proper error handling')">🔌 Flask API</button>
+            <button onclick="quickPrompt('Create a music player UI with playlist, progress bar, animated visualizer, and controls')">🎵 Music Player</button>
         </div>
     </div>
 
@@ -62,12 +68,17 @@
             <span><i class="fa-solid fa-folder-tree"></i> Files</span>
             <div class="fe-actions">
                 <button onclick="showNewFileDialog()" title="New file"><i class="fa-solid fa-file-plus"></i></button>
+                <button onclick="triggerUpload()" title="Upload files"><i class="fa-solid fa-upload"></i></button>
                 <button onclick="loadFiles()" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
             </div>
         </div>
-        <div class="fe-list" id="fileList">
-            <div class="fe-empty">Workspace empty</div>
+        <div class="fe-search-wrap">
+            <input type="text" class="fe-search" id="fileSearch" placeholder="Search files..." oninput="filterFiles(this.value)">
         </div>
+        <div class="fe-list" id="fileList" ondragover="onFileDragOver(event)" ondragleave="onFileDragLeave(event)" ondrop="onFileDrop(event)">
+            <div class="fe-empty">Workspace is empty</div>
+        </div>
+        <div class="fe-drop-hint" id="feDropHint"><i class="fa-solid fa-cloud-arrow-up"></i> Drop files to upload</div>
     </div>
 
     <!-- Stats -->
@@ -76,9 +87,12 @@
             <span><i class="fa-solid fa-message"></i> <span id="historyCount">0</span> msgs</span>
             <span><i class="fa-solid fa-file-code"></i> <span id="fileCount">0</span> files</span>
         </div>
-        <div class="version-row">Claw IDE v3.0 · OpenRouter</div>
+        <div class="version-row">Claw IDE v3.1 · <span id="activeProvider">Groq</span></div>
     </div>
 </div>
+
+<!-- Hidden file upload input -->
+<input type="file" id="uploadInput" multiple style="display:none" onchange="handleFileUpload(this.files)">
 
 <!-- ==================== MAIN ==================== -->
 <div class="main-wrapper">
@@ -94,8 +108,12 @@
                 </div>
             </div>
             <div class="chat-header-right">
+                <button class="icon-btn stop-btn" id="stopBtn" onclick="stopAgent()" title="Stop agent" style="display:none">
+                    <i class="fa-solid fa-stop"></i> Stop
+                </button>
                 <button class="icon-btn" onclick="exportChat()" title="Export chat"><i class="fa-solid fa-download"></i></button>
                 <button class="icon-btn" onclick="clearChat()" title="Clear messages"><i class="fa-solid fa-trash"></i></button>
+                <button class="icon-btn" onclick="showSettings()" title="API Key Settings"><i class="fa-solid fa-gear"></i></button>
             </div>
         </div>
 
@@ -109,6 +127,10 @@
                     <span>🔧 Real tool execution</span>
                     <span>💾 Session memory</span>
                     <span>⚡ Live preview</span>
+                </div>
+                <div class="welcome-key-hint" id="welcomeKeyHint" style="display:none">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    No API key configured. <button onclick="showSettings()">Add a key →</button>
                 </div>
             </div>
         </div>
@@ -124,14 +146,17 @@
         <div class="input-wrapper">
             <div class="input-hints" id="inputHints">
                 <span onclick="quickPrompt('List all files in the workspace and explain what each does')">📋 Explore files</span>
-                <span onclick="quickPrompt('Optimize and refactor all code in the workspace for performance')">⚡ Optimize code</span>
-                <span onclick="quickPrompt('Add dark mode toggle to the existing app')">🌙 Dark mode</span>
+                <span onclick="quickPrompt('Optimize and refactor all code in the workspace for performance and readability')">⚡ Optimize code</span>
+                <span onclick="quickPrompt('Add a dark/light mode toggle to the existing app')">🌙 Dark mode</span>
                 <span onclick="quickPrompt('Write a comprehensive README.md for this project')">📖 Write README</span>
+                <span onclick="quickPrompt('Add error handling, input validation, and loading states to the existing app')">🛡️ Add validation</span>
+                <span onclick="quickPrompt('Make the app fully responsive and mobile-friendly')">📱 Mobile-friendly</span>
             </div>
             <div class="input-container" id="inputContainer">
                 <textarea id="prompt" placeholder="Describe what to build or ask anything... (↵ send, ⇧↵ newline)"></textarea>
                 <div class="input-footer">
                     <span class="char-count" id="charCount">0</span>
+                    <span class="input-shortcut">⇧↵ newline</span>
                     <button class="send-btn" id="sendBtn" onclick="sendPrompt()">
                         <i class="fa-solid fa-paper-plane"></i>
                     </button>
@@ -155,9 +180,6 @@
             <button class="panel-tab" id="tab-editor" onclick="switchTab('editor')">
                 <i class="fa-solid fa-code"></i> Editor
             </button>
-            <button class="panel-tab" id="tab-diff" onclick="switchTab('diff')" style="display:none">
-                <i class="fa-solid fa-code-compare"></i> Diff
-            </button>
             <div class="panel-actions">
                 <button onclick="refreshBrowser()" title="Refresh Preview"><i class="fa-solid fa-rotate-right"></i></button>
                 <button onclick="openInNewTab()" title="Open in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
@@ -176,15 +198,22 @@
                 <button onclick="refreshBrowser()"><i class="fa-solid fa-rotate-right"></i></button>
                 <button onclick="openInNewTab()"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
             </div>
-            <iframe src="/workspace/index.html" class="preview-iframe" id="previewFrame"
+            <iframe src="about:blank" class="preview-iframe" id="previewFrame"
                 title="Live Preview" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
+            <div class="preview-empty" id="previewEmpty">
+                <i class="fa-solid fa-globe"></i>
+                <p>No preview yet</p>
+                <span>Files created by the agent will appear here</span>
+            </div>
         </div>
 
         <!-- Terminal -->
         <div class="terminal-panel" id="terminal-panel">
             <div class="terminal-toolbar">
                 <span class="term-title"><i class="fa-solid fa-terminal"></i> Workspace Terminal</span>
-                <button onclick="clearTerminal()" title="Clear"><i class="fa-solid fa-eraser"></i></button>
+                <div style="display:flex;gap:4px">
+                    <button onclick="clearTerminal()" title="Clear"><i class="fa-solid fa-eraser"></i></button>
+                </div>
             </div>
             <div class="terminal-output" id="terminalOutput">
                 <div class="term-welcome">Claw IDE Terminal — commands run inside <strong>agent_workspace/</strong></div>
@@ -202,7 +231,7 @@
                 <span class="editor-filename" id="editorFilename">No file open</span>
                 <div class="editor-actions">
                     <span class="editor-lang" id="editorLang"></span>
-                    <button onclick="saveCurrentFile()" id="saveBtn" class="save-btn" style="display:none" title="Save file">
+                    <button onclick="saveCurrentFile()" id="saveBtn" class="save-btn" style="display:none" title="Save (Ctrl+S)">
                         <i class="fa-solid fa-floppy-disk"></i> Save
                     </button>
                     <button onclick="closeEditor()" title="Close"><i class="fa-solid fa-xmark"></i></button>
@@ -213,7 +242,6 @@
                 <textarea class="editor-textarea" id="editorTextarea" spellcheck="false" oninput="onEditorChange()"></textarea>
             </div>
         </div>
-
     </div>
 </div>
 
@@ -228,7 +256,7 @@
             <div class="settings-provider-header">
                 <div class="settings-provider-name">
                     <span class="provider-badge groq-badge">⚡ Groq</span>
-                    <span class="provider-sub">Free · Ultra-fast · Llama 3, Mixtral</span>
+                    <span class="provider-sub">Free · Ultra-fast · Llama 3, Mixtral, DeepSeek</span>
                 </div>
                 <a href="https://console.groq.com/keys" target="_blank" class="get-key-link">Get free key →</a>
             </div>
@@ -244,7 +272,7 @@
             <div class="settings-provider-header">
                 <div class="settings-provider-name">
                     <span class="provider-badge or-badge">🔀 OpenRouter</span>
-                    <span class="provider-sub">Free + Paid · Claude, GPT-4o, Gemini, DeepSeek</span>
+                    <span class="provider-sub">Free + Paid · Claude, GPT-4o, Gemini, DeepSeek, Llama 4</span>
                 </div>
                 <a href="https://openrouter.ai/keys" target="_blank" class="get-key-link">Get free key →</a>
             </div>
@@ -277,8 +305,21 @@
 <div class="ctx-menu" id="ctxMenu">
     <div onclick="ctxOpen()"><i class="fa-solid fa-eye"></i> Open</div>
     <div onclick="ctxPreview()"><i class="fa-solid fa-globe"></i> Preview</div>
+    <div onclick="ctxRename()"><i class="fa-solid fa-pencil"></i> Rename</div>
     <div class="ctx-sep"></div>
     <div onclick="ctxDelete()" class="ctx-danger"><i class="fa-solid fa-trash"></i> Delete</div>
+</div>
+
+<!-- ==================== RENAME DIALOG ==================== -->
+<div class="modal-overlay" id="renameModal" onclick="hideRenameDialog(event)">
+    <div class="modal">
+        <div class="modal-title"><i class="fa-solid fa-pencil"></i> Rename File</div>
+        <input type="text" class="modal-input" id="renameInput" placeholder="New filename">
+        <div class="modal-actions">
+            <button class="btn-ghost" onclick="hideRenameDialog()">Cancel</button>
+            <button class="btn-primary" onclick="doRename()">Rename</button>
+        </div>
+    </div>
 </div>
 
 <script src="/static/js/main.js"></script>

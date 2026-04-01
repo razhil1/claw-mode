@@ -9,8 +9,8 @@ from src.llm import CODING_MODELS, DEFAULT_MODEL, validate_key, set_runtime_key
 
 app = Flask(__name__)
 
-if not os.environ.get("OPENROUTER_API_KEY"):
-    print("WARNING: OPENROUTER_API_KEY is not set. AI features will be unavailable.")
+if not os.environ.get("OPENROUTER_API_KEY") and not os.environ.get("GROQ_API_KEY"):
+    print("WARNING: No API keys set. AI features will be unavailable until a key is added via Settings.")
 
 WORKSPACE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "agent_workspace"))
 os.makedirs(WORKSPACE_DIR, exist_ok=True)
@@ -21,6 +21,7 @@ ACTIVE_MODEL = os.environ.get("CLAW_MODEL", DEFAULT_MODEL)
 _sessions: dict[str, ClawAgent] = {}
 _sessions_lock = threading.Lock()
 
+
 def get_or_create_agent(session_id: str) -> ClawAgent:
     with _sessions_lock:
         if session_id not in _sessions:
@@ -29,21 +30,24 @@ def get_or_create_agent(session_id: str) -> ClawAgent:
             _sessions[session_id].model = ACTIVE_MODEL
         return _sessions[session_id]
 
+
 @app.route("/")
 def index():
     return render_template("index.html")
+
 
 @app.route("/workspace/")
 @app.route("/workspace/<path:filename>")
 def serve_workspace(filename="index.html"):
     return send_from_directory(WORKSPACE_DIR, filename)
 
+
 # ===================== FILES API =====================
 @app.route("/api/files")
 def list_files():
     files_list = []
     for root, dirs, filenames in os.walk(WORKSPACE_DIR):
-        dirs[:] = [d for d in dirs if d not in ('node_modules', '__pycache__', '.git', 'venv', '.next', 'dist')]
+        dirs[:] = [d for d in dirs if d not in ('node_modules', '__pycache__', '.git', 'venv', '.next', 'dist', '.cache')]
         for name in filenames:
             rel_dir = os.path.relpath(root, WORKSPACE_DIR)
             if rel_dir == ".":
@@ -52,10 +56,12 @@ def list_files():
                 files_list.append(os.path.join(rel_dir, name).replace("\\", "/"))
     return jsonify({"files": sorted(files_list)})
 
+
 @app.route("/api/file/<path:filepath>")
 def read_file(filepath):
     content = tool_file_read(filepath)
     return jsonify({"path": filepath, "content": content})
+
 
 @app.route("/api/file/<path:filepath>", methods=["PUT"])
 def write_file(filepath):
@@ -64,10 +70,12 @@ def write_file(filepath):
     result = tool_file_edit(filepath, content)
     return jsonify({"ok": True, "result": result})
 
+
 @app.route("/api/file/<path:filepath>", methods=["DELETE"])
 def delete_file(filepath):
     result = tool_file_delete(filepath)
     return jsonify({"ok": True, "result": result})
+
 
 @app.route("/api/file/new", methods=["POST"])
 def new_file():
@@ -78,6 +86,50 @@ def new_file():
     content = data.get("content", "")
     result = tool_file_edit(filepath, content)
     return jsonify({"ok": True, "result": result})
+
+
+@app.route("/api/upload", methods=["POST"])
+def upload_files():
+    """Upload one or more files into the workspace."""
+    from pathlib import Path
+    from src.toolbox import enforce_safe_path
+    uploaded = []
+    errors = []
+    for key in request.files:
+        f = request.files[key]
+        filename = f.filename.lstrip("/") if f.filename else None
+        if not filename:
+            continue
+        try:
+            safe_path = enforce_safe_path(filename)
+            safe_path.parent.mkdir(parents=True, exist_ok=True)
+            f.save(str(safe_path))
+            uploaded.append(filename)
+        except Exception as e:
+            errors.append({"file": filename, "error": str(e)})
+    return jsonify({"ok": True, "uploaded": uploaded, "errors": errors})
+
+
+# ===================== WORKSPACE STATS =====================
+@app.route("/api/workspace/stats")
+def workspace_stats():
+    total_size = 0
+    file_count = 0
+    for root, dirs, filenames in os.walk(WORKSPACE_DIR):
+        dirs[:] = [d for d in dirs if d not in ('node_modules', '__pycache__', '.git')]
+        for name in filenames:
+            fp = os.path.join(root, name)
+            try:
+                total_size += os.path.getsize(fp)
+                file_count += 1
+            except OSError:
+                pass
+    return jsonify({
+        "file_count": file_count,
+        "total_size": total_size,
+        "total_size_kb": round(total_size / 1024, 1),
+    })
+
 
 # ===================== MODELS API =====================
 @app.route("/api/models")
@@ -90,9 +142,11 @@ def get_models():
             "description": info["description"],
             "context": info["context"],
             "tier": info["tier"],
-            "active": model_id == ACTIVE_MODEL
+            "provider": info.get("provider", "openrouter"),
+            "active": model_id == ACTIVE_MODEL,
         })
     return jsonify({"models": result, "active": ACTIVE_MODEL})
+
 
 @app.route("/api/model", methods=["POST"])
 def set_model():
@@ -103,7 +157,8 @@ def set_model():
         return jsonify({"error": "Unknown model"}), 400
     ACTIVE_MODEL = model_id
     os.environ["CLAW_MODEL"] = model_id
-    return jsonify({"success": True, "active": ACTIVE_MODEL})
+    return jsonify({"success": True, "active": ACTIVE_MODEL, "provider": CODING_MODELS[model_id].get("provider", "openrouter")})
+
 
 # ===================== TERMINAL API =====================
 @app.route("/api/terminal", methods=["POST"])
@@ -115,6 +170,7 @@ def terminal():
     output = tool_bash_run(command)
     return jsonify({"output": output})
 
+
 # ===================== SESSION API =====================
 @app.route("/api/session/new", methods=["POST"])
 def new_session():
@@ -122,12 +178,27 @@ def new_session():
     session_id = uuid.uuid4().hex
     return jsonify({"session_id": session_id})
 
+
 @app.route("/api/session/<session_id>/clear", methods=["POST"])
 def clear_session(session_id):
     with _sessions_lock:
         if session_id in _sessions:
             _sessions[session_id].clear_history()
     return jsonify({"ok": True})
+
+
+# ===================== STOP AGENT =====================
+@app.route("/api/chat/stop", methods=["POST"])
+def stop_chat():
+    data = request.json or {}
+    session_id = data.get("session_id", "default")
+    with _sessions_lock:
+        agent = _sessions.get(session_id)
+    if agent:
+        agent.request_stop()
+        return jsonify({"ok": True, "message": "Stop signal sent."})
+    return jsonify({"ok": False, "message": "Session not found."}), 404
+
 
 # ===================== STREAMING CHAT API =====================
 @app.route("/api/chat/stream", methods=["POST"])
@@ -157,20 +228,20 @@ def chat_stream():
         }
     )
 
+
 # ===================== SETTINGS / KEY MANAGEMENT =====================
 @app.route("/api/settings/key-status")
 def key_status():
-    """Return which providers have keys configured."""
     or_key = os.environ.get("OPENROUTER_API_KEY", "")
     gr_key = os.environ.get("GROQ_API_KEY", "")
-    # Also check runtime keys
     from src.llm import _runtime_keys
     or_key = _runtime_keys.get("openrouter") or or_key
     gr_key = _runtime_keys.get("groq") or gr_key
     return jsonify({
-        "openrouter": {"configured": bool(or_key), "prefix": or_key[:15] + "..." if or_key else ""},
-        "groq":       {"configured": bool(gr_key), "prefix": gr_key[:15] + "..." if gr_key else ""},
+        "openrouter": {"configured": bool(or_key), "prefix": or_key[:12] + "..." if or_key else ""},
+        "groq":       {"configured": bool(gr_key), "prefix": gr_key[:12] + "..." if gr_key else ""},
     })
+
 
 @app.route("/api/settings/validate-key", methods=["POST"])
 def api_validate_key():
@@ -182,6 +253,7 @@ def api_validate_key():
     result = validate_key(provider, key)
     return jsonify(result)
 
+
 @app.route("/api/settings/set-key", methods=["POST"])
 def api_set_key():
     """Store an API key in process memory for immediate use (no restart needed)."""
@@ -191,14 +263,14 @@ def api_set_key():
     if not key:
         return jsonify({"ok": False, "message": "No key provided"}), 400
     set_runtime_key(provider, key)
-    # Also persist to process env so subprocesses see it
     env_var = "GROQ_API_KEY" if provider == "groq" else "OPENROUTER_API_KEY"
     os.environ[env_var] = key
     return jsonify({"ok": True, "message": f"{provider} key saved for this session"})
 
+
 if __name__ == "__main__":
     print("=" * 50)
-    print("  Claw IDE — AI Coding Agent v3.0")
+    print("  Claw IDE — AI Coding Agent v3.1")
     print(f"  Workspace: {WORKSPACE_DIR}")
     print("  URL: http://localhost:5000")
     print("=" * 50)
