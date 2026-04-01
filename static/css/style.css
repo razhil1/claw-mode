@@ -1136,6 +1136,52 @@ textarea::placeholder { color: var(--text-dimmer); }
 @keyframes toastIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
 @keyframes toastOut { to{opacity:0;transform:translateX(20px)} }
 
+/* ===================== MODEL CARD ===================== */
+.model-section { padding-bottom: 10px; }
+.model-card {
+    margin-top: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    padding: 8px 10px;
+}
+.model-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 5px;
+    gap: 6px;
+}
+.model-role-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.role-fast    { background: rgba(63,185,80,0.15);  color: var(--green);  }
+.role-thinking{ background: rgba(163,113,247,0.15); color: var(--purple); }
+.role-coding  { background: rgba(31,111,235,0.15);  color: var(--blue-bright); }
+.role-powerful{ background: rgba(248,81,73,0.12);   color: var(--orange); }
+.role-balanced{ background: rgba(139,148,158,0.15); color: var(--text-dim); }
+.role-smart   { background: rgba(210,153,34,0.15);  color: var(--yellow); }
+.model-price {
+    font-size: 10px;
+    color: var(--text-dimmer);
+    white-space: nowrap;
+    font-family: monospace;
+}
+.model-desc { font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+.model-ctx  { font-size: 10px; color: var(--text-dimmer); margin-top: 4px; font-family: monospace; }
+
+/* optgroup styling */
+select optgroup { font-size: 10px; font-weight: 700; color: var(--text-dimmer); }
+select option   { font-size: 12px; color: var(--text); background: var(--panel); padding: 2px 0; }
+
 /* ===================== STYLED SELECT ===================== */
 .styled-select {
     width: 100%;

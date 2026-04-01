@@ -5,7 +5,8 @@ import time
 import threading
 from src.agent import ClawAgent
 from src.toolbox import tool_bash_run, get_workspace_root, tool_file_read, tool_file_edit, tool_file_delete
-from src.llm import CODING_MODELS, DEFAULT_MODEL, validate_key, set_runtime_key
+from src.llm import ALL_MODELS, DEFAULT_MODEL, validate_key, set_runtime_key
+CODING_MODELS = ALL_MODELS  # backwards-compatible alias
 
 app = Flask(__name__)
 
@@ -135,14 +136,18 @@ def workspace_stats():
 @app.route("/api/models")
 def get_models():
     result = []
-    for model_id, info in CODING_MODELS.items():
+    for model_id, info in ALL_MODELS.items():
         result.append({
             "id": model_id,
             "label": info["label"],
+            "short": info.get("short", ""),
             "description": info["description"],
             "context": info["context"],
             "tier": info["tier"],
             "provider": info.get("provider", "openrouter"),
+            "role": info.get("role", "balanced"),
+            "emoji": info.get("emoji", ""),
+            "price_note": info.get("price_note", "Free"),
             "active": model_id == ACTIVE_MODEL,
         })
     return jsonify({"models": result, "active": ACTIVE_MODEL})

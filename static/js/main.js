@@ -560,40 +560,94 @@ function clearTerminal() {
 }
 
 // ===================== MODELS =====================
+const MODEL_GROUPS = [
+    {
+        key: 'smart',
+        label: '🤖 Smart Combo — Auto-Routing',
+        match: m => m.provider === 'smart',
+    },
+    {
+        key: 'groq_free',
+        label: '⚡ Groq — Ultra-Fast & Free',
+        match: m => m.provider === 'groq' && m.tier === 'free',
+    },
+    {
+        key: 'or_free_coding',
+        label: '💻 Coding Specialists — Free',
+        match: m => m.provider === 'openrouter' && m.tier === 'free' && m.role === 'coding',
+    },
+    {
+        key: 'or_free_thinking',
+        label: '🧠 Thinking / Reasoning — Free',
+        match: m => m.provider === 'openrouter' && m.tier === 'free' && m.role === 'thinking',
+    },
+    {
+        key: 'or_free_powerful',
+        label: '🚀 Powerful Large Models — Free',
+        match: m => m.provider === 'openrouter' && m.tier === 'free' && ['powerful','balanced'].includes(m.role),
+    },
+    {
+        key: 'paid_fast',
+        label: '★ Premium — Fast & Affordable',
+        match: m => m.tier === 'paid' && ['fast','balanced'].includes(m.role),
+    },
+    {
+        key: 'paid_coding',
+        label: '★ Premium — Coding Specialists',
+        match: m => m.tier === 'paid' && m.role === 'coding',
+    },
+    {
+        key: 'paid_thinking',
+        label: '★ Premium — Deep Reasoning',
+        match: m => m.tier === 'paid' && m.role === 'thinking',
+    },
+    {
+        key: 'paid_powerful',
+        label: '★ Premium — Most Powerful',
+        match: m => m.tier === 'paid' && m.role === 'powerful',
+    },
+];
+
 async function loadModels() {
     const sel = document.getElementById('modelSelect');
-    const desc = document.getElementById('modelDesc');
-    const tier = document.getElementById('modelTier');
     try {
         const res = await fetch('/api/models');
         const data = await res.json();
         sel.innerHTML = '';
-        const groups = {};
-        data.models.forEach(m => {
-            S.models[m.id] = m;
-            const key = m.provider + '_' + m.tier;
-            groups[key] = groups[key] || [];
-            groups[key].push(m);
-        });
 
-        const groupOrder = [
-            { key: 'groq_free',       label: '⚡ Groq — Free' },
-            { key: 'openrouter_free', label: '✦ OpenRouter — Free' },
-            { key: 'openrouter_paid', label: '★ OpenRouter — Premium' },
-        ];
-        for (const { key, label } of groupOrder) {
-            if (groups[key]?.length) {
-                const g = document.createElement('optgroup');
-                g.label = label;
-                groups[key].forEach(m => {
-                    const o = document.createElement('option');
-                    o.value = m.id;
-                    o.textContent = m.label;
-                    if (m.active) o.selected = true;
-                    g.appendChild(o);
-                });
-                sel.appendChild(g);
-            }
+        data.models.forEach(m => { S.models[m.id] = m; });
+
+        const placed = new Set();
+
+        for (const group of MODEL_GROUPS) {
+            const members = data.models.filter(m => group.match(m) && !placed.has(m.id));
+            if (!members.length) continue;
+            const g = document.createElement('optgroup');
+            g.label = group.label;
+            members.forEach(m => {
+                placed.add(m.id);
+                const o = document.createElement('option');
+                o.value = m.id;
+                o.textContent = (m.emoji ? m.emoji + ' ' : '') + m.label + (m.short ? '  — ' + m.short : '');
+                if (m.active) o.selected = true;
+                g.appendChild(o);
+            });
+            sel.appendChild(g);
+        }
+
+        // Any stragglers
+        const leftover = data.models.filter(m => !placed.has(m.id));
+        if (leftover.length) {
+            const g = document.createElement('optgroup');
+            g.label = 'Other';
+            leftover.forEach(m => {
+                const o = document.createElement('option');
+                o.value = m.id;
+                o.textContent = m.label;
+                if (m.active) o.selected = true;
+                g.appendChild(o);
+            });
+            sel.appendChild(g);
         }
 
         const active = S.models[data.active];
@@ -604,24 +658,40 @@ async function loadModels() {
     }
 }
 
+const ROLE_META = {
+    fast:     { label: '⚡ Fast',        cls: 'role-fast' },
+    thinking: { label: '🧠 Reasoning',   cls: 'role-thinking' },
+    coding:   { label: '💻 Coding',      cls: 'role-coding' },
+    powerful: { label: '🚀 Powerful',    cls: 'role-powerful' },
+    balanced: { label: '⚖ Balanced',    cls: 'role-balanced' },
+};
+
 function updateModelInfo(m) {
+    const role = ROLE_META[m.role] || ROLE_META.balanced;
+    const badge = document.getElementById('modelRoleBadge');
+    badge.textContent = role.label;
+    badge.className = 'model-role-badge ' + (m.provider === 'smart' ? 'role-smart' : role.cls);
+
+    const price = document.getElementById('modelPrice');
+    price.textContent = m.price_note || (m.tier === 'free' ? 'Free' : '');
+    price.style.color = m.tier === 'free' ? 'var(--green)' : 'var(--yellow)';
+
     document.getElementById('modelDesc').textContent = m.description;
-    const tier = document.getElementById('modelTier');
-    tier.textContent = m.tier === 'free'
-        ? '✦ Free · ' + fmtCtx(m.context)
-        : '★ Premium · ' + fmtCtx(m.context);
-    tier.style.color = m.tier === 'free' ? 'var(--green)' : 'var(--yellow)';
+    document.getElementById('modelCtx').textContent =
+        'Context: ' + fmtCtx(m.context) + (m.provider === 'smart' ? '  · Multi-model routing' : '  · ' + m.provider);
 }
 
 function updateProviderLabel(provider) {
     const el = document.getElementById('activeProvider');
-    if (el) el.textContent = provider === 'groq' ? 'Groq' : 'OpenRouter';
+    if (!el) return;
+    const labels = { groq: 'Groq', openrouter: 'OpenRouter', smart: 'Smart' };
+    el.textContent = labels[provider] || provider;
 }
 
 function fmtCtx(n) {
-    if (n >= 1000000) return (n/1000000).toFixed(0) + 'M ctx';
-    if (n >= 1000) return Math.round(n/1000) + 'K ctx';
-    return n + ' ctx';
+    if (n >= 1000000) return (n/1000000).toFixed(0) + 'M tokens';
+    if (n >= 1000) return Math.round(n/1000) + 'K tokens';
+    return n + ' tokens';
 }
 
 async function switchModel(modelId) {

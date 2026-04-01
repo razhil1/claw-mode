@@ -38,13 +38,17 @@
     </div>
 
     <!-- Model Selector -->
-    <div class="sidebar-section">
+    <div class="sidebar-section model-section">
         <div class="section-label"><i class="fa-solid fa-microchip"></i> Model</div>
-        <select id="modelSelect" onchange="switchModel(this.value)" class="styled-select">
-            <option value="">Loading...</option>
-        </select>
-        <div class="model-desc" id="modelDesc"></div>
-        <div class="model-tier" id="modelTier"></div>
+        <select id="modelSelect" onchange="switchModel(this.value)" class="styled-select"></select>
+        <div class="model-card" id="modelCard">
+            <div class="model-card-top">
+                <span class="model-role-badge" id="modelRoleBadge"></span>
+                <span class="model-price" id="modelPrice"></span>
+            </div>
+            <div class="model-desc" id="modelDesc"></div>
+            <div class="model-ctx" id="modelCtx"></div>
+        </div>
     </div>
 
     <!-- Quick Actions -->
