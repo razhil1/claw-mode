@@ -216,12 +216,34 @@ def chat_stream():
 
     agent = get_or_create_agent(session_id)
 
-    def generate():
+    event_queue: list = []
+    done_event = threading.Event()
+    error_holder: list = []
+
+    def run_agent():
         try:
             for event in agent.run_streaming(prompt):
-                yield f"data: {json.dumps(event)}\n\n"
+                event_queue.append(event)
         except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            error_holder.append(str(e))
+        finally:
+            done_event.set()
+
+    t = threading.Thread(target=run_agent, daemon=True)
+    t.start()
+
+    def generate():
+        sent = 0
+        while not done_event.is_set() or sent < len(event_queue):
+            while sent < len(event_queue):
+                yield f"data: {json.dumps(event_queue[sent])}\n\n"
+                sent += 1
+            if not done_event.is_set():
+                # heartbeat to keep connection alive
+                yield ": heartbeat\n\n"
+                done_event.wait(timeout=0.5)
+        if error_holder:
+            yield f"data: {json.dumps({'type': 'error', 'message': error_holder[0]})}\n\n"
         yield "data: [DONE]\n\n"
 
     return Response(
@@ -230,6 +252,7 @@ def chat_stream():
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
         }
     )
 
