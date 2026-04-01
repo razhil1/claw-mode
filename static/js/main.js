@@ -114,7 +114,7 @@ async function checkKeyStatus() {
     try {
         const res = await fetch('/api/settings/key-status');
         const data = await res.json();
-        const hasKey = data.groq?.configured || data.openrouter?.configured;
+        const hasKey = data.nvidia?.configured;
         const hint = document.getElementById('welcomeKeyHint');
         if (hint) hint.style.display = hasKey ? 'none' : 'flex';
     } catch {}
@@ -562,66 +562,26 @@ function clearTerminal() {
 // ===================== MODELS =====================
 const MODEL_GROUPS = [
     {
-        key: 'smart',
-        label: '🤖 Smart Combo — Auto-Routing',
-        match: m => m.provider === 'smart',
+        key: 'nvidia_fast',
+        label: '⚡ NVIDIA — Fast Models',
+        match: m => m.provider === 'nvidia' && ['fast', 'balanced'].includes(m.role),
     },
     {
-        key: 'groq_free',
-        label: '⚡ Groq — Ultra-Fast & Free',
-        match: m => m.provider === 'groq' && m.tier === 'free',
+        key: 'nvidia_coding',
+        label: '💻 NVIDIA — Coding Specialists',
+        match: m => m.provider === 'nvidia' && m.role === 'coding',
     },
     {
-        key: 'or_free_coding',
-        label: '💻 Coding Specialists — Free',
-        match: m => m.provider === 'openrouter' && m.tier === 'free' && m.role === 'coding',
+        key: 'nvidia_thinking',
+        label: '🧠 NVIDIA — Reasoning Models',
+        match: m => m.provider === 'nvidia' && m.role === 'thinking',
     },
     {
-        key: 'or_free_thinking',
-        label: '🧠 Thinking / Reasoning — Free',
-        match: m => m.provider === 'openrouter' && m.tier === 'free' && m.role === 'thinking',
-    },
-    {
-        key: 'or_free_powerful',
-        label: '🚀 Powerful Large Models — Free',
-        match: m => m.provider === 'openrouter' && m.tier === 'free' && ['powerful','balanced'].includes(m.role),
-    },
-    {
-        key: 'paid_fast',
-        label: '★ Premium — Fast & Affordable',
-        match: m => m.tier === 'paid' && ['fast','balanced'].includes(m.role),
-    },
-    {
-        key: 'paid_coding',
-        label: '★ Premium — Coding Specialists',
-        match: m => m.tier === 'paid' && m.role === 'coding',
-    },
-    {
-        key: 'paid_thinking',
-        label: '★ Premium — Deep Reasoning',
-        match: m => m.tier === 'paid' && m.role === 'thinking',
-    },
-    {
-        key: 'paid_powerful',
-        label: '★ Premium — Most Powerful',
-        match: m => m.tier === 'paid' && m.role === 'powerful',
+        key: 'nvidia_powerful',
+        label: '🚀 NVIDIA — Powerful Models',
+        match: m => m.provider === 'nvidia' && m.role === 'powerful',
     },
 ];
-
-function _renderModelStatus(data) {
-    const el = document.getElementById('modelFetchStatus');
-    if (!el) return;
-    if (data.fetch_error) {
-        el.textContent = '⚠ Could not reach OpenRouter — showing Groq only';
-        el.className = 'model-fetch-status fetch-warn';
-    } else if (data.or_model_count > 0) {
-        el.textContent = `✓ ${data.or_model_count} free OpenRouter models live`;
-        el.className = 'model-fetch-status fetch-ok';
-    } else {
-        el.textContent = 'Add an OpenRouter key to unlock free models';
-        el.className = 'model-fetch-status fetch-hint';
-    }
-}
 
 async function loadModels() {
     const sel = document.getElementById('modelSelect');
@@ -632,8 +592,6 @@ async function loadModels() {
 
         S.models = {};
         data.models.forEach(m => { S.models[m.id] = m; });
-
-        _renderModelStatus(data);
 
         const placed = new Set();
 
@@ -653,51 +611,11 @@ async function loadModels() {
             sel.appendChild(g);
         }
 
-        // Any OpenRouter free stragglers not matched by a group
-        const leftover = data.models.filter(m => !placed.has(m.id) && m.provider === 'openrouter' && m.tier === 'free');
-        if (leftover.length) {
-            // Sort by context window desc then label
-            leftover.sort((a, b) => (b.context - a.context) || a.label.localeCompare(b.label));
-            const g = document.createElement('optgroup');
-            g.label = '✦ More Free OpenRouter Models';
-            leftover.forEach(m => {
-                placed.add(m.id);
-                const o = document.createElement('option');
-                o.value = m.id;
-                const ctx = m.context >= 1000000 ? (m.context/1000000).toFixed(0)+'M' : Math.round(m.context/1000)+'K';
-                o.textContent = `${m.emoji || '✦'} ${m.label}  — ${ctx} ctx`;
-                if (m.active) o.selected = true;
-                g.appendChild(o);
-            });
-            sel.appendChild(g);
-        }
-
         const active = S.models[data.active];
         if (active) updateModelInfo(active);
-        updateProviderLabel(active?.provider || 'groq');
+        updateProviderLabel('NVIDIA');
     } catch {
         sel.innerHTML = '<option>Error loading models</option>';
-    }
-}
-
-async function refreshModels() {
-    const btn = document.getElementById('refreshModelsBtn');
-    const statusEl = document.getElementById('modelFetchStatus');
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>'; }
-    if (statusEl) { statusEl.textContent = 'Fetching live free models from OpenRouter…'; statusEl.className = 'model-fetch-status fetch-hint'; }
-    try {
-        const res = await fetch('/api/models/refresh', { method: 'POST' });
-        const data = await res.json();
-        await loadModels();
-        if (data.ok) {
-            showToast(`Found ${data.or_free_models} free OpenRouter models`, 'success');
-        } else {
-            showToast('Could not reach OpenRouter: ' + (data.error || 'unknown error'), 'error');
-        }
-    } catch {
-        showToast('Refresh failed', 'error');
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i>'; }
     }
 }
 
@@ -727,8 +645,7 @@ function updateModelInfo(m) {
 function updateProviderLabel(provider) {
     const el = document.getElementById('activeProvider');
     if (!el) return;
-    const labels = { groq: 'Groq', openrouter: 'OpenRouter', smart: 'Smart' };
-    el.textContent = labels[provider] || provider;
+    el.textContent = 'NVIDIA';
 }
 
 function fmtCtx(n) {
@@ -907,15 +824,12 @@ async function sendPrompt() {
                     else if (evt.type === 'key_error') {
                         const banner = document.createElement('div');
                         banner.className = 'key-error-banner';
-                        const providerName = evt.error_type?.includes('groq') ? 'Groq' : 'OpenRouter';
                         let linkHtml = '';
                         if (evt.error_type?.includes('NO_KEY') || evt.error_type?.includes('BAD_KEY')) {
-                            const url = evt.error_type?.includes('groq') ? 'https://console.groq.com/keys' : 'https://openrouter.ai/keys';
-                            linkHtml = ` <a href="${url}" target="_blank">Get a key →</a> or <button onclick="showSettings()">Open Settings</button>`;
+                            linkHtml = ` <a href="https://build.nvidia.com" target="_blank">Get a free key →</a> or <button onclick="showSettings()">Open Settings</button>`;
                         }
-                        banner.innerHTML = `<i class="fa-solid fa-key"></i><div><strong>API Key Issue (${providerName})</strong><br>${escHtml(evt.message)}${linkHtml}</div>`;
+                        banner.innerHTML = `<i class="fa-solid fa-key"></i><div><strong>NVIDIA API Key Issue</strong><br>${escHtml(evt.message)}${linkHtml}</div>`;
                         contentDiv.appendChild(banner);
-                        // Auto-open settings for missing/bad key
                         if (evt.error_type?.includes('NO_KEY') || evt.error_type?.includes('BAD_KEY')) {
                             setTimeout(() => showSettings(), 600);
                         }
@@ -1103,28 +1017,27 @@ function highlightChangedFiles(files) {
 // ===================== SETTINGS =====================
 function showSettings() {
     document.getElementById('settingsModal').classList.add('open');
-    // Pre-fill key status
     fetch('/api/settings/key-status').then(r => r.json()).then(data => {
-        if (data.groq?.configured) {
-            const s = document.getElementById('groqKeyStatus');
+        const s = document.getElementById('nvidiaKeyStatus');
+        if (!s) return;
+        if (data.nvidia?.configured) {
             s.className = 'key-status ok';
-            s.textContent = `✓ Configured (${data.groq.prefix})`;
-        }
-        if (data.openrouter?.configured) {
-            const s = document.getElementById('orKeyStatus');
-            s.className = 'key-status ok';
-            s.textContent = `✓ Configured (${data.openrouter.prefix})`;
+            s.textContent = `✓ Configured (${data.nvidia.prefix})`;
+        } else {
+            s.className = 'key-status';
+            s.textContent = 'Not configured — add your key below';
         }
     }).catch(() => {});
 }
+
 function hideSettings(e) {
     if (e && e.target !== document.getElementById('settingsModal')) return;
     document.getElementById('settingsModal').classList.remove('open');
 }
 
-async function saveAndValidateKey(provider) {
-    const input = document.getElementById(provider === 'groq' ? 'groqKeyInput' : 'orKeyInput');
-    const statusEl = document.getElementById(provider === 'groq' ? 'groqKeyStatus' : 'orKeyStatus');
+async function saveAndValidateKey() {
+    const input = document.getElementById('nvidiaKeyInput');
+    const statusEl = document.getElementById('nvidiaKeyStatus');
     const key = input.value.trim();
     if (!key) { statusEl.className = 'key-status err'; statusEl.textContent = 'Please enter a key'; return; }
 
@@ -1132,27 +1045,23 @@ async function saveAndValidateKey(provider) {
     statusEl.textContent = 'Saving & testing...';
 
     try {
-        // Save the key
         await fetch('/api/settings/set-key', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider, key })
+            body: JSON.stringify({ key })
         });
-        // Validate it
         const res = await fetch('/api/settings/validate-key', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider, key })
+            body: JSON.stringify({ key })
         });
         const data = await res.json();
         if (data.ok) {
             statusEl.className = 'key-status ok';
             statusEl.textContent = '✓ ' + data.message;
             input.value = '';
-            showToast(`${provider} key saved & verified`, 'success');
+            showToast('NVIDIA key saved & verified', 'success');
             checkKeyStatus();
-            // Refresh live model list — especially important after adding an OpenRouter key
-            refreshModels();
         } else {
             statusEl.className = 'key-status err';
             statusEl.textContent = '✗ ' + data.message;

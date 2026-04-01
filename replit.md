@@ -1,16 +1,14 @@
 # Claw IDE — AI Coding Agent IDE
 
-A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses OpenRouter or Groq to call various LLMs and can run bash commands, read/write files, and perform multi-turn reasoning loops.
+A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses NVIDIA's API (OpenAI-compatible) to call LLMs and can run bash commands, read/write files, and perform multi-turn reasoning loops.
 
 ## Architecture
 
 - **app.py** — Flask web server; REST + SSE API endpoints
 - **src/** — Python agent runtime
   - `agent.py` — `ClawAgent` class: multi-turn agentic loop with stop signal support
-  - `llm.py` — LLM client supporting OpenRouter + Groq with 15+ models
+  - `llm.py` — LLM client using NVIDIA's API (via openai package) with 7 free models
   - `toolbox.py` — Tool implementations (bash, file read/write/search/list)
-  - `runtime.py` — Legacy PortRuntime class (porting workspace)
-  - `query_engine.py` — Legacy LLM query engine
   - `tools.py` — Tool metadata/definitions
   - `commands.py` — Agent slash-commands
 - **templates/index.html** — Frontend SPA (chat UI + code editor + terminal + preview)
@@ -20,11 +18,22 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 
 ## Key Configuration
 
-- **Port:** 5000 (Flask dev server on 0.0.0.0)
-- **LLM Providers:** OpenRouter and Groq (set via Settings modal or env vars)
-- **Default Model:** `groq:llama-3.3-70b-versatile`
+- **Port:** 5000 (gunicorn gthread, 4 threads, 300s timeout)
+- **LLM Provider:** NVIDIA (https://integrate.api.nvidia.com/v1) — OpenAI-compatible
+- **API Key env var:** `NVIDIA_API_KEY`
+- **Default Model:** `nvidia:phi-4-mini-instruct` → `microsoft/phi-4-mini-instruct`
 - **Agent workspace:** `./agent_workspace/`
 - **Max agent turns:** 16 per message
+
+## Available Models (all free via NVIDIA)
+
+- `nvidia:phi-4-mini-instruct` — Phi-4 Mini (default, fast, 16K ctx)
+- `nvidia:llama-3.3-70b-instruct` — Llama 3.3 70B (best all-rounder, 128K ctx)
+- `nvidia:llama-3.1-8b-instruct` — Llama 3.1 8B (ultra-fast, 128K ctx)
+- `nvidia:deepseek-r1-distill-llama-70b` — DeepSeek R1 Distill (thinking/reasoning, 128K ctx)
+- `nvidia:qwen2.5-coder-32b` — Qwen2.5 Coder 32B (code specialist, 32K ctx)
+- `nvidia:nemotron-super-49b` — Nemotron Super 49B (powerful, 32K ctx)
+- `nvidia:gemma-3-12b` — Gemma 3 12B (balanced, 131K ctx)
 
 ## API Endpoints
 
@@ -44,9 +53,9 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 - `POST /api/session/<id>/clear` — Clear session history
 - `POST /api/chat/stream` — Stream agent SSE events
 - `POST /api/chat/stop` — Send stop signal to running agent
-- `GET /api/settings/key-status` — Check configured API keys
-- `POST /api/settings/validate-key` — Validate an API key
-- `POST /api/settings/set-key` — Set API key for current session
+- `GET /api/settings/key-status` — Check NVIDIA API key status
+- `POST /api/settings/validate-key` — Validate NVIDIA API key
+- `POST /api/settings/set-key` — Set NVIDIA API key for current session
 
 ## SSE Event Types
 
@@ -61,7 +70,7 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 
 ## Features
 
-- **Multi-model support** — 15+ free and paid models via Groq + OpenRouter
+- **7 free NVIDIA models** — Switch between them in the sidebar
 - **Stop agent** — Abort ongoing agent runs mid-stream
 - **Dark/light theme** — Toggle with ☾ button, persisted in localStorage
 - **Session persistence** — Session ID saved in localStorage across reloads
@@ -71,18 +80,17 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 - **Live preview** — Iframe preview of HTML files with auto-refresh
 - **Built-in terminal** — Run commands in agent_workspace with history
 - **Code editor** — Textarea editor with line numbers and syntax highlighting
-- **Settings modal** — Configure API keys with live validation
+- **Settings modal** — Configure NVIDIA API key with live validation
 - **Export chat** — Download chat as Markdown
 - **Keyboard shortcuts** — Ctrl+/ focus prompt, Ctrl+Shift+N new session, Ctrl+S save file, Esc close modals
 
 ## Dependencies
 
-- Python 3.12
+- Python 3.11+
 - Flask 3.x
-- Gunicorn (for production)
-- All other imports use Python standard library only
+- Gunicorn with gthread workers (4 threads, 300s timeout)
+- openai (Python package, used with NVIDIA's OpenAI-compatible endpoint)
 
 ## Running
 
-- **Development:** `python3 app.py` (runs on port 5000, debug mode)
-- **Production:** `gunicorn --bind=0.0.0.0:5000 --reuse-port app:app`
+- **Production:** `gunicorn --bind 0.0.0.0:5000 --reuse-port --reload --worker-class gthread --threads 4 --timeout 300 app:app`

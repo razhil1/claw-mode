@@ -9,7 +9,7 @@ import time
 import threading
 from typing import Generator
 
-from .llm import LLMClient, DEFAULT_MODEL, get_all_models, SMART_MODELS, set_runtime_key
+from .llm import LLMClient, DEFAULT_MODEL, get_all_models, set_runtime_key
 from .toolbox import (
     tool_bash_run,
     tool_file_read,

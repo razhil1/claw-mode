@@ -4,23 +4,19 @@ import json
 import time
 import threading
 from src.agent import ClawAgent
-from src.toolbox import tool_bash_run, get_workspace_root, tool_file_read, tool_file_edit, tool_file_delete
-from src.llm import (
-    get_all_models, refresh_all_models, DEFAULT_MODEL,
-    validate_key, set_runtime_key, _or_model_cache,
-)
+from src.toolbox import tool_bash_run, tool_file_read, tool_file_edit, tool_file_delete
+from src.llm import get_all_models, DEFAULT_MODEL, validate_key, set_runtime_key, get_nvidia_key
 
 app = Flask(__name__)
 
-if not os.environ.get("OPENROUTER_API_KEY") and not os.environ.get("GROQ_API_KEY"):
-    print("WARNING: No API keys set. AI features will be unavailable until a key is added via Settings.")
+if not os.environ.get("NVIDIA_API_KEY"):
+    print("WARNING: No NVIDIA_API_KEY set. AI features require a valid NVIDIA API key.")
 
 WORKSPACE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "agent_workspace"))
 os.makedirs(WORKSPACE_DIR, exist_ok=True)
 
 ACTIVE_MODEL = os.environ.get("CLAW_MODEL", DEFAULT_MODEL)
 
-# Session store — keyed by session_id
 _sessions: dict[str, ClawAgent] = {}
 _sessions_lock = threading.Lock()
 
@@ -93,8 +89,6 @@ def new_file():
 
 @app.route("/api/upload", methods=["POST"])
 def upload_files():
-    """Upload one or more files into the workspace."""
-    from pathlib import Path
     from src.toolbox import enforce_safe_path
     uploaded = []
     errors = []
@@ -147,34 +141,13 @@ def get_models():
             "description": info.get("description", ""),
             "context": info.get("context", 4096),
             "tier": info.get("tier", "free"),
-            "provider": info.get("provider", "openrouter"),
+            "provider": info.get("provider", "nvidia"),
             "role": info.get("role", "balanced"),
-            "emoji": info.get("emoji", "✦"),
+            "emoji": info.get("emoji", "⚡"),
             "price_note": info.get("price_note", "Free"),
             "active": model_id == ACTIVE_MODEL,
         })
-    cache_age = int(time.time() - _or_model_cache.get("fetched_at", 0))
-    or_count = sum(1 for m in result if m["provider"] == "openrouter")
-    return jsonify({
-        "models": result,
-        "active": ACTIVE_MODEL,
-        "or_model_count": or_count,
-        "cache_age_seconds": cache_age,
-        "fetch_error": _or_model_cache.get("error"),
-    })
-
-
-@app.route("/api/models/refresh", methods=["POST"])
-def refresh_models():
-    """Force-refresh the OpenRouter free model list from the live API."""
-    all_models, error = refresh_all_models()
-    or_count = sum(1 for info in all_models.values() if info.get("provider") == "openrouter")
-    return jsonify({
-        "ok": error is None,
-        "error": error,
-        "total_models": len(all_models),
-        "or_free_models": or_count,
-    })
+    return jsonify({"models": result, "active": ACTIVE_MODEL})
 
 
 @app.route("/api/model", methods=["POST"])
@@ -187,8 +160,7 @@ def set_model():
         return jsonify({"error": "Unknown model"}), 400
     ACTIVE_MODEL = model_id
     os.environ["CLAW_MODEL"] = model_id
-    provider = all_models[model_id].get("provider", "openrouter")
-    return jsonify({"success": True, "active": ACTIVE_MODEL, "provider": provider})
+    return jsonify({"success": True, "active": ACTIVE_MODEL, "provider": "nvidia"})
 
 
 # ===================== TERMINAL API =====================
@@ -265,7 +237,6 @@ def chat_stream():
                 yield f"data: {json.dumps(event_queue[sent])}\n\n"
                 sent += 1
             if not done_event.is_set():
-                # heartbeat to keep connection alive
                 yield ": heartbeat\n\n"
                 done_event.wait(timeout=0.5)
         if error_holder:
@@ -286,45 +257,39 @@ def chat_stream():
 # ===================== SETTINGS / KEY MANAGEMENT =====================
 @app.route("/api/settings/key-status")
 def key_status():
-    or_key = os.environ.get("OPENROUTER_API_KEY", "")
-    gr_key = os.environ.get("GROQ_API_KEY", "")
-    from src.llm import _runtime_keys
-    or_key = _runtime_keys.get("openrouter") or or_key
-    gr_key = _runtime_keys.get("groq") or gr_key
+    key = get_nvidia_key()
     return jsonify({
-        "openrouter": {"configured": bool(or_key), "prefix": or_key[:12] + "..." if or_key else ""},
-        "groq":       {"configured": bool(gr_key), "prefix": gr_key[:12] + "..." if gr_key else ""},
+        "nvidia": {
+            "configured": bool(key),
+            "prefix": key[:14] + "..." if key else "",
+        }
     })
 
 
 @app.route("/api/settings/validate-key", methods=["POST"])
 def api_validate_key():
     data = request.json
-    provider = data.get("provider", "openrouter")
     key = data.get("key", "").strip()
     if not key:
         return jsonify({"ok": False, "message": "No key provided"}), 400
-    result = validate_key(provider, key)
+    result = validate_key(key)
     return jsonify(result)
 
 
 @app.route("/api/settings/set-key", methods=["POST"])
 def api_set_key():
-    """Store an API key in process memory for immediate use (no restart needed)."""
     data = request.json
-    provider = data.get("provider", "openrouter")
     key = data.get("key", "").strip()
     if not key:
         return jsonify({"ok": False, "message": "No key provided"}), 400
-    set_runtime_key(provider, key)
-    env_var = "GROQ_API_KEY" if provider == "groq" else "OPENROUTER_API_KEY"
-    os.environ[env_var] = key
-    return jsonify({"ok": True, "message": f"{provider} key saved for this session"})
+    set_runtime_key(key)
+    os.environ["NVIDIA_API_KEY"] = key
+    return jsonify({"ok": True, "message": "NVIDIA key saved for this session"})
 
 
 if __name__ == "__main__":
     print("=" * 50)
-    print("  Claw IDE — AI Coding Agent v3.1")
+    print("  Claw IDE — AI Coding Agent v3.2")
     print(f"  Workspace: {WORKSPACE_DIR}")
     print("  URL: http://localhost:5000")
     print("=" * 50)

@@ -41,11 +41,7 @@
     <div class="sidebar-section model-section">
         <div class="section-label">
             <span><i class="fa-solid fa-microchip"></i> Model</span>
-            <button onclick="refreshModels()" id="refreshModelsBtn" title="Refresh free model list from OpenRouter" class="fe-icon-btn">
-                <i class="fa-solid fa-arrows-rotate"></i>
-            </button>
         </div>
-        <div class="model-fetch-status" id="modelFetchStatus"></div>
         <select id="modelSelect" onchange="switchModel(this.value)" class="styled-select"></select>
         <div class="model-card" id="modelCard">
             <div class="model-card-top">
@@ -97,7 +93,7 @@
             <span><i class="fa-solid fa-message"></i> <span id="historyCount">0</span> msgs</span>
             <span><i class="fa-solid fa-file-code"></i> <span id="fileCount">0</span> files</span>
         </div>
-        <div class="version-row">Claw IDE v3.1 · <span id="activeProvider">Groq</span></div>
+        <div class="version-row">Claw IDE v3.2 · <span id="activeProvider">NVIDIA</span></div>
     </div>
 </div>
 
@@ -140,7 +136,7 @@
                 </div>
                 <div class="welcome-key-hint" id="welcomeKeyHint" style="display:none">
                     <i class="fa-solid fa-triangle-exclamation"></i>
-                    No API key configured. <button onclick="showSettings()">Add a key →</button>
+                    No NVIDIA API key configured. <button onclick="showSettings()">Add a key →</button>
                 </div>
             </div>
         </div>
@@ -259,38 +255,22 @@
 <div class="modal-overlay" id="settingsModal" onclick="hideSettings(event)">
     <div class="modal settings-modal">
         <div class="modal-title"><i class="fa-solid fa-gear"></i> API Key Settings</div>
-        <p class="settings-desc">Configure your LLM provider API keys. Keys are saved for this session and used immediately — no restart needed.</p>
+        <p class="settings-desc">Configure your NVIDIA API key. Get a free key at <a href="https://build.nvidia.com" target="_blank" style="color:var(--accent)">build.nvidia.com</a> — no credit card required.</p>
 
-        <!-- Groq -->
+        <!-- NVIDIA -->
         <div class="settings-provider">
             <div class="settings-provider-header">
                 <div class="settings-provider-name">
-                    <span class="provider-badge groq-badge">⚡ Groq</span>
-                    <span class="provider-sub">Free · Ultra-fast · Llama 3, Mixtral, DeepSeek</span>
+                    <span class="provider-badge nvidia-badge">🚀 NVIDIA</span>
+                    <span class="provider-sub">Free · Phi-4, Llama 3.3, DeepSeek R1, Qwen2.5 Coder & more</span>
                 </div>
-                <a href="https://console.groq.com/keys" target="_blank" class="get-key-link">Get free key →</a>
+                <a href="https://build.nvidia.com" target="_blank" class="get-key-link">Get free key →</a>
             </div>
             <div class="key-input-row">
-                <input type="password" id="groqKeyInput" placeholder="gsk_..." class="key-input" autocomplete="off">
-                <button class="validate-btn" onclick="saveAndValidateKey('groq')"><i class="fa-solid fa-check"></i> Save & Test</button>
+                <input type="password" id="nvidiaKeyInput" placeholder="nvapi-..." class="key-input" autocomplete="off">
+                <button class="validate-btn" onclick="saveAndValidateKey()"><i class="fa-solid fa-check"></i> Save & Test</button>
             </div>
-            <div class="key-status" id="groqKeyStatus"></div>
-        </div>
-
-        <!-- OpenRouter -->
-        <div class="settings-provider">
-            <div class="settings-provider-header">
-                <div class="settings-provider-name">
-                    <span class="provider-badge or-badge">🔀 OpenRouter</span>
-                    <span class="provider-sub">Free + Paid · Claude, GPT-4o, Gemini, DeepSeek, Llama 4</span>
-                </div>
-                <a href="https://openrouter.ai/keys" target="_blank" class="get-key-link">Get free key →</a>
-            </div>
-            <div class="key-input-row">
-                <input type="password" id="orKeyInput" placeholder="sk-or-v1-..." class="key-input" autocomplete="off">
-                <button class="validate-btn" onclick="saveAndValidateKey('openrouter')"><i class="fa-solid fa-check"></i> Save & Test</button>
-            </div>
-            <div class="key-status" id="orKeyStatus"></div>
+            <div class="key-status" id="nvidiaKeyStatus"></div>
         </div>
 
         <div class="modal-actions" style="margin-top:16px">
