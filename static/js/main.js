@@ -1,149 +1,350 @@
-// ===================== MARKED + HIGHLIGHT INIT =====================
-marked.setOptions({
-    highlight: (code, lang) => {
-        const l = hljs.getLanguage(lang) ? lang : 'plaintext';
-        return hljs.highlight(code, { language: l }).value;
-    },
-    breaks: true, gfm: true
+'use strict';
+
+// ===================== MARKED CONFIG =====================
+marked.setOptions({ breaks: true, gfm: true });
+
+// ===================== STATE =====================
+const S = {
+    sessionId: generateId(),
+    historyLen: 0,
+    turnCount: 0,
+    currentFile: null,
+    currentFileContent: '',
+    editorDirty: false,
+    isAgentRunning: false,
+    ctxFile: null,
+    models: {},
+    termHistory: [],
+    termIdx: -1,
+};
+
+// ===================== INIT =====================
+document.addEventListener('DOMContentLoaded', () => {
+    loadModels();
+    loadFiles();
+    initResizer();
+    initTerminal();
+    initEditor();
+    switchTab('preview');
+    document.getElementById('prompt').focus();
+    updateStats();
+    document.addEventListener('click', hideCtxMenu);
+    document.getElementById('newFilePath').addEventListener('keydown', e => {
+        if (e.key === 'Enter') createNewFile();
+        if (e.key === 'Escape') hideNewFileDialog();
+    });
+    document.getElementById('prompt').addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 200) + 'px';
+        document.getElementById('charCount').textContent = this.value.length;
+    });
+    document.getElementById('prompt').addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(); }
+    });
 });
 
-// ===================== GLOBALS =====================
-const chat = document.getElementById("chat");
-const promptInput = document.getElementById("prompt");
-const loading = document.getElementById("loading");
-const sendBtn = document.getElementById("sendBtn");
-let currentFile = null;
-let terminalHistory = [];
-let terminalHistoryIdx = -1;
+function generateId() {
+    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
-// ===================== TEXTAREA RESIZE =====================
-promptInput.addEventListener('input', function () {
-    this.style.height = '22px';
-    this.style.height = Math.min(this.scrollHeight, 180) + 'px';
-});
-promptInput.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendPrompt(); }
-});
+// ===================== SIDEBAR =====================
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('collapsed');
+}
 
-// ===================== PANEL TABS =====================
+// ===================== TABS =====================
 function switchTab(tab) {
-    document.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('tab-' + tab).classList.add('active');
-
-    document.getElementById('preview-panel').classList.remove('active');
-    document.getElementById('terminal-panel').classList.remove('active');
-    document.getElementById('editor-panel').classList.remove('active');
-
+    ['preview','terminal','editor'].forEach(t => {
+        document.getElementById(t + '-panel').classList.remove('active');
+        const btn = document.getElementById('tab-' + t);
+        if (btn) btn.classList.remove('active');
+    });
     document.getElementById(tab + '-panel').classList.add('active');
-
-    if (tab === 'terminal') {
-        document.getElementById('terminalInput').focus();
-    }
+    const activeBtn = document.getElementById('tab-' + tab);
+    if (activeBtn) activeBtn.classList.add('active');
+    if (tab === 'terminal') document.getElementById('terminalInput').focus();
 }
 
 // ===================== FILE EXPLORER =====================
 async function loadFiles() {
-    const fileList = document.getElementById("fileList");
+    const list = document.getElementById('fileList');
     try {
-        const res = await fetch("/api/files");
+        const res = await fetch('/api/files');
         const data = await res.json();
+        const files = data.files || [];
+        document.getElementById('fileCount').textContent = files.length;
 
-        if (!data.files || !data.files.length) {
-            fileList.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--text-dimmer)">Workspace is empty</div>';
+        if (!files.length) {
+            list.innerHTML = '<div class="fe-empty">Workspace is empty</div>';
             return;
         }
-
-        fileList.innerHTML = "";
-        data.files.forEach(file => {
-            const div = document.createElement("div");
-            div.className = "fe-item" + (file === currentFile ? " active" : "");
+        list.innerHTML = '';
+        files.forEach(file => {
+            const div = document.createElement('div');
+            div.className = 'fe-item' + (file === S.currentFile ? ' active' : '');
+            div.dataset.file = file;
             div.title = file;
-
-            const ext = file.split('.').pop().toLowerCase();
-            const icons = { html:'fa-brands fa-html5 ic-html', css:'fa-brands fa-css3-alt ic-css', js:'fa-brands fa-js ic-js', py:'fa-brands fa-python ic-py', json:'fa-solid fa-brackets-curly ic-json', md:'fa-brands fa-markdown ic-md' };
-            const icon = icons[ext] || 'fa-solid fa-file';
-
-            div.innerHTML = `<i class="${icon}"></i>${file}`;
-            div.onclick = () => openFile(file);
-            fileList.appendChild(div);
+            div.innerHTML = `<i class="${fileIcon(file)}"></i><span>${file}</span>`;
+            div.onclick = () => openFileInEditor(file);
+            div.oncontextmenu = (e) => showCtxMenu(e, file);
+            list.appendChild(div);
         });
-    } catch (e) {
-        fileList.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--red)">Error loading files</div>';
+    } catch {
+        list.innerHTML = '<div class="fe-empty" style="color:var(--red)">Error loading files</div>';
     }
 }
 
-async function openFile(filepath) {
-    currentFile = filepath;
+function fileIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    const map = {
+        html: 'fa-brands fa-html5 ic-html',
+        htm: 'fa-brands fa-html5 ic-html',
+        css: 'fa-brands fa-css3-alt ic-css',
+        js: 'fa-brands fa-js ic-js',
+        mjs: 'fa-brands fa-js ic-js',
+        ts: 'fa-solid fa-code ic-ts',
+        tsx: 'fa-solid fa-code ic-ts',
+        py: 'fa-brands fa-python ic-py',
+        json: 'fa-solid fa-brackets-curly ic-json',
+        md: 'fa-brands fa-markdown ic-md',
+        rs: 'fa-solid fa-gear ic-rs',
+        txt: 'fa-solid fa-file-lines ic-txt',
+        svg: 'fa-regular fa-image',
+        sh: 'fa-solid fa-terminal',
+    };
+    return (map[ext] || 'fa-regular fa-file') + ' ';
+}
+
+// ===================== EDITOR =====================
+function initEditor() {
+    const ta = document.getElementById('editorTextarea');
+    ta.addEventListener('scroll', syncLineNumbers);
+    ta.addEventListener('input', syncLineNumbers);
+    ta.addEventListener('keydown', editorKeyHandler);
+}
+
+function editorKeyHandler(e) {
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        const ta = e.target;
+        const start = ta.selectionStart, end = ta.selectionEnd;
+        ta.value = ta.value.slice(0, start) + '  ' + ta.value.slice(end);
+        ta.selectionStart = ta.selectionEnd = start + 2;
+        syncLineNumbers();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveCurrentFile();
+    }
+}
+
+function syncLineNumbers() {
+    const ta = document.getElementById('editorTextarea');
+    const ln = document.getElementById('lineNumbers');
+    const lines = ta.value.split('\n').length;
+    let html = '';
+    for (let i = 1; i <= lines; i++) html += `<div>${i}</div>`;
+    ln.innerHTML = html;
+    ln.scrollTop = ta.scrollTop;
+}
+
+function onEditorChange() {
+    S.editorDirty = true;
+    const saveBtn = document.getElementById('saveBtn');
+    if (saveBtn) {
+        saveBtn.classList.add('unsaved');
+        saveBtn.style.display = 'flex';
+    }
+    const dot = document.querySelector('.unsaved-dot');
+    if (dot) dot.classList.add('show');
+    syncLineNumbers();
+}
+
+async function openFileInEditor(filepath) {
+    S.currentFile = filepath;
     document.querySelectorAll('.fe-item').forEach(e => e.classList.remove('active'));
-    event && event.currentTarget && event.currentTarget.classList.add('active');
+    const activeEl = document.querySelector(`.fe-item[data-file="${filepath}"]`);
+    if (activeEl) activeEl.classList.add('active');
 
     const ext = filepath.split('.').pop().toLowerCase();
-    const previewable = ['html', 'htm', 'md'];
+    const previewable = ['html', 'htm'];
 
     if (previewable.includes(ext)) {
-        document.getElementById("browserUrl").value = "/workspace/" + filepath;
+        document.getElementById('browserUrl').value = '/workspace/' + filepath;
         refreshBrowser();
         switchTab('preview');
-    } else {
-        // Show in editor tab
-        try {
-            const res = await fetch("/api/file/" + filepath);
-            const data = await res.json();
-            document.getElementById('editorHeader').textContent = filepath;
-            const editorContent = document.getElementById('editorContent');
-            editorContent.innerHTML = hljs.highlightAuto(data.content).value;
-            switchTab('editor');
-        } catch (e) {
-            switchTab('preview');
-        }
+        return;
     }
+
+    try {
+        const res = await fetch('/api/file/' + filepath);
+        const data = await res.json();
+        const content = data.content || '';
+
+        S.currentFileContent = content;
+        S.editorDirty = false;
+
+        const ta = document.getElementById('editorTextarea');
+        ta.value = content;
+        syncLineNumbers();
+
+        const fn = document.getElementById('editorFilename');
+        fn.textContent = filepath;
+
+        const saveBtn = document.getElementById('saveBtn');
+        saveBtn.style.display = 'flex';
+        saveBtn.classList.remove('unsaved');
+
+        const langEl = document.getElementById('editorLang');
+        const langs = { js:'JavaScript', ts:'TypeScript', py:'Python', html:'HTML', css:'CSS', json:'JSON', md:'Markdown', rs:'Rust', sh:'Shell' };
+        langEl.textContent = langs[ext] || ext.toUpperCase();
+
+        switchTab('editor');
+    } catch (e) {
+        showToast('Could not open file', 'error');
+    }
+}
+
+async function saveCurrentFile() {
+    if (!S.currentFile) return;
+    const content = document.getElementById('editorTextarea').value;
+    try {
+        const res = await fetch('/api/file/' + S.currentFile, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        });
+        if (res.ok) {
+            S.editorDirty = false;
+            S.currentFileContent = content;
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.classList.remove('unsaved');
+            showToast(`Saved ${S.currentFile}`, 'success');
+            if (S.currentFile.endsWith('.html')) {
+                document.getElementById('browserUrl').value = '/workspace/' + S.currentFile;
+                setTimeout(refreshBrowser, 300);
+            }
+        }
+    } catch { showToast('Save failed', 'error'); }
+}
+
+function closeEditor() {
+    S.currentFile = null;
+    S.editorDirty = false;
+    document.getElementById('editorFilename').textContent = 'No file open';
+    document.getElementById('editorTextarea').value = '';
+    document.getElementById('lineNumbers').innerHTML = '';
+    document.getElementById('saveBtn').style.display = 'none';
+    document.getElementById('editorLang').textContent = '';
+    switchTab('preview');
+}
+
+// ===================== NEW FILE DIALOG =====================
+function showNewFileDialog() {
+    document.getElementById('newFileModal').classList.add('open');
+    document.getElementById('newFilePath').value = '';
+    document.getElementById('newFilePath').focus();
+}
+function hideNewFileDialog(e) {
+    if (e && e.target !== document.getElementById('newFileModal')) return;
+    document.getElementById('newFileModal').classList.remove('open');
+}
+async function createNewFile() {
+    const path = document.getElementById('newFilePath').value.trim();
+    if (!path) return;
+    try {
+        await fetch('/api/file/new', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path, content: '' })
+        });
+        document.getElementById('newFileModal').classList.remove('open');
+        await loadFiles();
+        await openFileInEditor(path);
+        showToast(`Created ${path}`, 'success');
+    } catch { showToast('Error creating file', 'error'); }
+}
+
+// ===================== CONTEXT MENU =====================
+function showCtxMenu(e, file) {
+    e.preventDefault();
+    S.ctxFile = file;
+    const m = document.getElementById('ctxMenu');
+    m.style.top = e.clientY + 'px';
+    m.style.left = e.clientX + 'px';
+    m.classList.add('open');
+}
+function hideCtxMenu() { document.getElementById('ctxMenu').classList.remove('open'); }
+function ctxOpen() { if (S.ctxFile) openFileInEditor(S.ctxFile); }
+function ctxPreview() {
+    if (!S.ctxFile) return;
+    document.getElementById('browserUrl').value = '/workspace/' + S.ctxFile;
+    refreshBrowser();
+    switchTab('preview');
+}
+async function ctxDelete() {
+    if (!S.ctxFile) return;
+    if (!confirm(`Delete "${S.ctxFile}"?`)) return;
+    try {
+        await fetch('/api/file/' + S.ctxFile, { method: 'DELETE' });
+        if (S.currentFile === S.ctxFile) closeEditor();
+        await loadFiles();
+        showToast(`Deleted ${S.ctxFile}`, 'info');
+    } catch { showToast('Error deleting file', 'error'); }
 }
 
 // ===================== PREVIEW =====================
 function refreshBrowser() {
-    const frame = document.getElementById("previewFrame");
-    const url = document.getElementById("browserUrl").value;
-    frame.src = url;
+    const frame = document.getElementById('previewFrame');
+    const url = document.getElementById('browserUrl').value;
+    frame.src = frame.src === url ? (frame.src = '', url) : url;
 }
-function openInNewTab() {
-    window.open(document.getElementById("browserUrl").value, "_blank");
-}
+function openInNewTab() { window.open(document.getElementById('browserUrl').value, '_blank'); }
 
 // ===================== TERMINAL =====================
-document.addEventListener('DOMContentLoaded', () => {
-    const termInput = document.getElementById('terminalInput');
-    if (termInput) {
-        termInput.addEventListener('keydown', async (e) => {
-            if (e.key === 'Enter') {
-                const cmd = termInput.value.trim();
-                if (!cmd) return;
-                terminalHistory.unshift(cmd);
-                terminalHistoryIdx = -1;
-                termInput.value = '';
-                await runTerminalCommand(cmd);
-            }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (terminalHistoryIdx < terminalHistory.length - 1) terminalHistoryIdx++;
-                termInput.value = terminalHistory[terminalHistoryIdx] || '';
-            }
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (terminalHistoryIdx > 0) terminalHistoryIdx--;
-                else terminalHistoryIdx = -1;
-                termInput.value = terminalHistory[terminalHistoryIdx] || '';
-            }
-        });
-    }
-});
+function initTerminal() {
+    const inp = document.getElementById('terminalInput');
+    inp.addEventListener('keydown', async e => {
+        if (e.key === 'Enter') {
+            const cmd = inp.value.trim();
+            if (!cmd) return;
+            S.termHistory.unshift(cmd);
+            S.termIdx = -1;
+            inp.value = '';
+            await runTerminalCommand(cmd);
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (S.termIdx < S.termHistory.length - 1) S.termIdx++;
+            inp.value = S.termHistory[S.termIdx] || '';
+        }
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (S.termIdx > 0) S.termIdx--;
+            else S.termIdx = -1;
+            inp.value = S.termHistory[S.termIdx] || '';
+        }
+    });
+}
+
+function runTerminalFromBtn() {
+    const inp = document.getElementById('terminalInput');
+    const cmd = inp.value.trim();
+    if (!cmd) return;
+    S.termHistory.unshift(cmd);
+    S.termIdx = -1;
+    inp.value = '';
+    runTerminalCommand(cmd);
+}
 
 async function runTerminalCommand(cmd) {
-    const output = document.getElementById('terminalOutput');
-    const cmdLine = document.createElement('div');
-    cmdLine.className = 'cmd-line';
-    cmdLine.textContent = '$ ' + cmd;
-    output.appendChild(cmdLine);
-    output.scrollTop = output.scrollHeight;
+    const out = document.getElementById('terminalOutput');
+    const cmdDiv = document.createElement('div');
+    cmdDiv.className = 'cmd-line';
+    cmdDiv.textContent = '$ ' + cmd;
+    out.appendChild(cmdDiv);
+    out.scrollTop = out.scrollHeight;
+    switchTab('terminal');
 
     try {
         const res = await fetch('/api/terminal', {
@@ -154,113 +355,369 @@ async function runTerminalCommand(cmd) {
         const data = await res.json();
         const outDiv = document.createElement('div');
         outDiv.className = 'cmd-output';
-        outDiv.textContent = data.output;
-        output.appendChild(outDiv);
-    } catch (err) {
+        outDiv.textContent = data.output || '';
+        out.appendChild(outDiv);
+    } catch {
         const errDiv = document.createElement('div');
         errDiv.className = 'cmd-error';
-        errDiv.textContent = 'Error: could not reach server.';
-        output.appendChild(errDiv);
+        errDiv.textContent = 'Error: server unreachable';
+        out.appendChild(errDiv);
     }
-    output.scrollTop = output.scrollHeight;
-    loadFiles();
+    out.scrollTop = out.scrollHeight;
+    await loadFiles();
 }
 
-// ===================== FORMAT RESPONSE =====================
-function formatAgentResponse(text) {
-    if (!text) return "";
-    // Hide raw TOOL: lines
-    text = text.replace(/^TOOL:\s*.+$/gm, '').trim();
-    const parts = text.split(/(<thought>[\s\S]*?<\/thought>)/gi);
-    let html = "";
-    parts.forEach(part => {
-        if (part.toLowerCase().startsWith('<thought>')) {
-            const m = part.match(/<thought>([\s\S]*?)<\/thought>/i);
-            const inner = m ? m[1].trim() : "";
-            html += `<div class="thought-block">
-                <div class="thought-header" onclick="toggleThought(this)">
-                    <i class="fa-solid fa-brain"></i> Reasoning Process
-                </div>
-                <div class="thought-content">${escapeHtml(inner)}</div>
-            </div>`;
-        } else if (part.trim()) {
-            html += marked.parse(part);
+function clearTerminal() {
+    document.getElementById('terminalOutput').innerHTML =
+        '<div class="term-welcome">Terminal cleared</div>';
+}
+
+// ===================== MODELS =====================
+async function loadModels() {
+    const sel = document.getElementById('modelSelect');
+    const desc = document.getElementById('modelDesc');
+    const tier = document.getElementById('modelTier');
+    try {
+        const res = await fetch('/api/models');
+        const data = await res.json();
+        sel.innerHTML = '';
+        const groups = { free: [], paid: [] };
+        data.models.forEach(m => {
+            S.models[m.id] = m;
+            groups[m.tier] = groups[m.tier] || [];
+            groups[m.tier].push(m);
+        });
+        const makeGroup = (label, models) => {
+            const g = document.createElement('optgroup');
+            g.label = label;
+            models.forEach(m => {
+                const o = document.createElement('option');
+                o.value = m.id;
+                o.textContent = m.label;
+                if (m.active) o.selected = true;
+                g.appendChild(o);
+            });
+            return g;
+        };
+        if (groups.free?.length) sel.appendChild(makeGroup('✦ Free Models', groups.free));
+        if (groups.paid?.length) sel.appendChild(makeGroup('★ Premium Models', groups.paid));
+
+        const active = S.models[data.active];
+        if (active) {
+            desc.textContent = active.description;
+            tier.textContent = active.tier === 'free' ? '✦ Free · ' + fmtCtx(active.context) : '★ Premium · ' + fmtCtx(active.context);
+            tier.style.color = active.tier === 'free' ? 'var(--green)' : 'var(--yellow)';
         }
-    });
-    return html;
+    } catch {
+        sel.innerHTML = '<option>Error loading models</option>';
+    }
+}
+
+function fmtCtx(n) {
+    if (n >= 1000000) return (n/1000000).toFixed(0) + 'M ctx';
+    if (n >= 1000) return Math.round(n/1000) + 'K ctx';
+    return n + ' ctx';
+}
+
+async function switchModel(modelId) {
+    if (!modelId) return;
+    const m = S.models[modelId];
+    if (m) {
+        document.getElementById('modelDesc').textContent = m.description;
+        const tier = document.getElementById('modelTier');
+        tier.textContent = m.tier === 'free' ? '✦ Free · ' + fmtCtx(m.context) : '★ Premium · ' + fmtCtx(m.context);
+        tier.style.color = m.tier === 'free' ? 'var(--green)' : 'var(--yellow)';
+    }
+    try {
+        await fetch('/api/model', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: modelId })
+        });
+        showToast('Model switched', 'info');
+    } catch { showToast('Error switching model', 'error'); }
+}
+
+// ===================== QUICK PROMPT =====================
+function quickPrompt(text) {
+    const inp = document.getElementById('prompt');
+    inp.value = text;
+    inp.style.height = 'auto';
+    inp.style.height = Math.min(inp.scrollHeight, 200) + 'px';
+    document.getElementById('charCount').textContent = text.length;
+    inp.focus();
+}
+
+// ===================== SESSION =====================
+async function newSession() {
+    if (!confirm('Start a new session? The current conversation will be cleared.')) return;
+    try {
+        await fetch(`/api/session/${S.sessionId}/clear`, { method: 'POST' });
+    } catch {}
+    S.sessionId = generateId();
+    S.historyLen = 0;
+    S.turnCount = 0;
+    clearChat();
+    updateStats();
+    showToast('New session started', 'info');
+}
+
+function updateStats() {
+    document.getElementById('historyCount').textContent = S.historyLen;
+    document.getElementById('turnCounter').textContent = S.turnCount + ' turn' + (S.turnCount !== 1 ? 's' : '');
 }
 
 // ===================== SEND PROMPT =====================
 async function sendPrompt() {
-    const text = promptInput.value.trim();
-    if (!text) return;
-    appendMessage(text, "user");
-    promptInput.value = ""; promptInput.style.height = '22px';
-    loading.classList.add("active");
-    sendBtn.disabled = true; promptInput.disabled = true;
-    scrollBottom();
+    const text = document.getElementById('prompt').value.trim();
+    if (!text || S.isAgentRunning) return;
+
+    appendMessage(text, 'user');
+    document.getElementById('prompt').value = '';
+    document.getElementById('prompt').style.height = 'auto';
+    document.getElementById('charCount').textContent = '0';
+
+    setAgentRunning(true);
+    setAgentStatus('yellow', 'Working...');
+    showStepBar('Initializing agent...');
+
+    // Create agent message bubble
+    const agentBubble = createAgentBubble();
+    const contentDiv = agentBubble.querySelector('.agent-content');
 
     try {
-        const res = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ prompt: text })
+        const res = await fetch('/api/chat/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: text, session_id: S.sessionId })
         });
-        const data = await res.json();
-        let html = formatAgentResponse(data.response || "");
 
-        if (data.log && data.log.trim()) {
-            html += `<div class="log-container">
-                <div class="log-header" onclick="toggleLog(this)">
-                    <span><i class="fa-solid fa-terminal"></i>&nbsp; Execution Log</span>
-                    <i class="fa-solid fa-chevron-down"></i>
-                </div>
-                <div class="log-content">${escapeHtml(data.log)}</div>
-            </div>`;
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        let accumulatedText = '';
+        let toolCalls = 0;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const lines = buf.split('\n');
+            buf = lines.pop();
+
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const raw = line.slice(6).trim();
+                if (raw === '[DONE]') break;
+                try {
+                    const evt = JSON.parse(raw);
+                    handleStreamEvent(evt, contentDiv, () => accumulatedText, (t) => { accumulatedText = t; }, (n) => { toolCalls = n; return toolCalls; }, toolCalls);
+                    if (evt.type === 'thinking') {
+                        showStepBar(evt.text.length > 60 ? evt.text.slice(0, 60) + '...' : evt.text);
+                    }
+                    if (evt.type === 'tool_call') {
+                        toolCalls++;
+                        showStepBar(`Running ${evt.tool}...`);
+                        S.turnCount++;
+                        updateStats();
+                    }
+                    if (evt.type === 'done') {
+                        S.historyLen = evt.history_len || S.historyLen + 1;
+                        if (evt.files_changed?.length) {
+                            await loadFiles();
+                            highlightChangedFiles(evt.files_changed);
+                            setTimeout(refreshBrowser, 500);
+                        }
+                        updateStats();
+                    }
+                } catch {}
+            }
         }
 
-        appendMessage(html, "agent", true);
-
-        // Apply copy buttons + syntax highlighting
-        document.querySelectorAll('.message.agent pre').forEach(block => {
-            if (!block.querySelector('.copy-btn')) {
-                const btn = document.createElement('button');
-                btn.className = 'copy-btn';
-                btn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy';
-                btn.onclick = function() { copyCode(this); };
-                block.appendChild(btn);
-            }
-            const codeEl = block.querySelector('code');
-            if (codeEl && !codeEl.dataset.highlighted) {
-                hljs.highlightElement(codeEl);
-                codeEl.dataset.highlighted = '1';
-            }
-        });
-
-        // Refresh file list and preview after agent acts
-        await loadFiles();
-        setTimeout(refreshBrowser, 400);
+        // Finalize bubble
+        finalizeAgentBubble(contentDiv, accumulatedText);
 
     } catch (err) {
-        appendMessage("⚠️ Could not reach the agent server.", "agent");
+        contentDiv.innerHTML = `<p style="color:var(--red)"><i class="fa-solid fa-circle-exclamation"></i> Error: ${escHtml(err.message)}</p>`;
     } finally {
-        loading.classList.remove("active");
-        sendBtn.disabled = false; promptInput.disabled = false;
-        promptInput.focus(); scrollBottom();
+        setAgentRunning(false);
+        setAgentStatus('green', 'Ready');
+        hideStepBar();
+        scrollBottom();
     }
 }
 
-// ===================== UI UTILITIES =====================
-function toggleLog(h) {
-    const c = h.nextElementSibling;
-    const i = h.querySelector('i.fa-chevron-down, i.fa-chevron-up');
-    c.style.display = c.style.display === 'block' ? 'none' : 'block';
-    if (i) i.className = c.style.display === 'block' ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down';
+function handleStreamEvent(evt, contentDiv, getText, setText, incTools, toolCount) {
+    if (evt.type === 'thinking') {
+        // Show as a thought block if substantial
+        if (evt.text && evt.text.length > 20 && !evt.text.startsWith('Thinking (turn')) {
+            let tb = contentDiv.querySelector('.thought-block');
+            if (!tb) {
+                tb = document.createElement('div');
+                tb.className = 'thought-block';
+                tb.innerHTML = `<div class="thought-header" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'"><i class="fa-solid fa-brain"></i> Reasoning</div><div class="thought-content"></div>`;
+                contentDiv.appendChild(tb);
+            }
+            tb.querySelector('.thought-content').textContent = evt.text;
+        }
+    }
+    else if (evt.type === 'tool_call') {
+        const step = document.createElement('div');
+        step.className = 'tool-step';
+        const toolIcon = toolIcons[evt.tool] || 'fa-solid fa-wrench';
+        step.innerHTML = `
+            <div class="tool-step-icon"><i class="${toolIcon}"></i></div>
+            <div class="tool-step-body">
+                <div class="tool-step-title"><span class="tool-badge-name">${escHtml(evt.tool)}</span></div>
+                <div class="tool-step-detail">${escHtml((evt.payload || '').slice(0, 80))}</div>
+            </div>`;
+        contentDiv.appendChild(step);
+        scrollBottom();
+    }
+    else if (evt.type === 'tool_result') {
+        const steps = contentDiv.querySelectorAll('.tool-step:not(.result)');
+        const lastStep = steps[steps.length - 1];
+        if (lastStep) {
+            lastStep.classList.add('result');
+            lastStep.querySelector('.tool-step-icon i').className = 'fa-solid fa-check';
+            const detail = lastStep.querySelector('.tool-step-detail');
+            if (detail) {
+                const first = (evt.result || '').split('\n')[0].slice(0, 70);
+                detail.textContent = (evt.elapsed ? `(${evt.elapsed}s) ` : '') + first;
+            }
+        }
+    }
+    else if (evt.type === 'token') {
+        const newText = getText() + '\n\n' + evt.text;
+        setText(newText.trim());
+        updateStreamingText(contentDiv, newText.trim());
+    }
+    else if (evt.type === 'error') {
+        const errDiv = document.createElement('div');
+        errDiv.className = 'tool-step error-step';
+        errDiv.innerHTML = `<div class="tool-step-icon"><i class="fa-solid fa-circle-exclamation"></i></div><div class="tool-step-body"><div class="tool-step-title">Error</div><div class="tool-step-detail">${escHtml(evt.message)}</div></div>`;
+        contentDiv.appendChild(errDiv);
+    }
+    scrollBottom();
 }
-function toggleThought(h) {
-    const c = h.nextElementSibling;
-    c.style.display = c.style.display === 'none' ? 'block' : 'none';
+
+const toolIcons = {
+    ListDirTool: 'fa-solid fa-folder-open',
+    FileReadTool: 'fa-solid fa-file-lines',
+    ViewFileLinesTool: 'fa-solid fa-list-ol',
+    SearchTool: 'fa-solid fa-magnifying-glass',
+    FileEditTool: 'fa-solid fa-pen-to-square',
+    FileDeleteTool: 'fa-solid fa-trash',
+    BashTool: 'fa-solid fa-terminal',
+};
+
+function updateStreamingText(contentDiv, text) {
+    let textDiv = contentDiv.querySelector('.streamed-text');
+    if (!textDiv) {
+        textDiv = document.createElement('div');
+        textDiv.className = 'streamed-text streaming-cursor';
+        contentDiv.appendChild(textDiv);
+    }
+    textDiv.innerHTML = marked.parse(text || '');
 }
+
+function finalizeAgentBubble(contentDiv, text) {
+    // Remove streaming cursor, apply full markdown
+    const textDiv = contentDiv.querySelector('.streamed-text');
+    if (textDiv) {
+        textDiv.classList.remove('streaming-cursor');
+        textDiv.innerHTML = marked.parse(text || '');
+    } else if (text) {
+        const d = document.createElement('div');
+        d.className = 'streamed-text';
+        d.innerHTML = marked.parse(text);
+        contentDiv.appendChild(d);
+    }
+    // Add copy buttons to code blocks
+    contentDiv.querySelectorAll('pre').forEach(pre => {
+        if (!pre.querySelector('.copy-btn')) {
+            const btn = document.createElement('button');
+            btn.className = 'copy-btn';
+            btn.innerHTML = '<i class="fa-regular fa-copy"></i> Copy';
+            btn.onclick = () => copyCode(btn);
+            pre.appendChild(btn);
+        }
+        const code = pre.querySelector('code');
+        if (code && !code.dataset.highlighted) {
+            try { hljs.highlightElement(code); code.dataset.highlighted = '1'; } catch {}
+        }
+    });
+}
+
+function createAgentBubble() {
+    const d = document.createElement('div');
+    d.className = 'message agent';
+    const inner = document.createElement('div');
+    inner.className = 'agent-content';
+    const typingEl = document.createElement('div');
+    typingEl.className = 'typing-indicator';
+    typingEl.innerHTML = '<span></span><span></span><span></span>';
+    inner.appendChild(typingEl);
+    d.appendChild(inner);
+    document.getElementById('chat').appendChild(d);
+    scrollBottom();
+
+    setTimeout(() => { typingEl.remove(); }, 600);
+    return d;
+}
+
+// ===================== UI HELPERS =====================
+function setAgentRunning(running) {
+    S.isAgentRunning = running;
+    const btn = document.getElementById('sendBtn');
+    const inp = document.getElementById('prompt');
+    btn.disabled = running;
+    inp.disabled = running;
+}
+
+function setAgentStatus(color, text) {
+    const st = document.getElementById('agentStatus');
+    const dot = st.querySelector('.status-dot');
+    dot.className = 'status-dot ' + color;
+    st.lastChild.textContent = ' ' + text;
+}
+
+function showStepBar(text) {
+    document.getElementById('stepLabel').textContent = text;
+    document.getElementById('stepBar').classList.add('active');
+}
+function hideStepBar() {
+    document.getElementById('stepBar').classList.remove('active');
+}
+
+function appendMessage(text, role) {
+    const d = document.createElement('div');
+    d.className = 'message ' + role;
+    d.textContent = text;
+    document.getElementById('chat').appendChild(d);
+    scrollBottom();
+}
+
+function clearChat() {
+    const chat = document.getElementById('chat');
+    chat.innerHTML = '';
+    const wc = document.createElement('div');
+    wc.className = 'welcome-card';
+    wc.innerHTML = `<div class="welcome-icon">⚡</div><h2>New Session</h2><p>Ready for your next project. What should I build?</p>`;
+    chat.appendChild(wc);
+}
+
+function scrollBottom() {
+    const c = document.getElementById('chat');
+    c.scrollTop = c.scrollHeight;
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function copyCode(btn) {
     const code = btn.closest('pre').querySelector('code');
     navigator.clipboard.writeText(code.innerText).then(() => {
@@ -270,99 +727,76 @@ function copyCode(btn) {
         setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
     });
 }
-function clearChat() {
-    const first = chat.firstElementChild;
-    chat.innerHTML = '';
-    if (first) chat.appendChild(first);
+
+function highlightChangedFiles(files) {
+    files.forEach(f => {
+        const el = document.querySelector(`.fe-item[data-file="${f}"]`);
+        if (el) {
+            el.classList.add('changed');
+            setTimeout(() => el.classList.remove('changed'), 4000);
+        }
+    });
 }
-function scrollBottom() { chat.scrollTop = chat.scrollHeight; }
-function appendMessage(content, role, isHtml = false) {
-    const d = document.createElement("div");
-    d.className = "message " + role;
-    if (isHtml) d.innerHTML = content; else d.textContent = content;
-    chat.appendChild(d);
-    scrollBottom();
+
+// ===================== TOAST =====================
+const toastContainer = (() => {
+    const d = document.createElement('div');
+    d.className = 'toast-container';
+    document.body.appendChild(d);
+    return d;
+})();
+
+function showToast(msg, type = 'info') {
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    toastContainer.appendChild(t);
+    setTimeout(() => t.remove(), 3000);
 }
-function escapeHtml(s) {
-    if (!s) return '';
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+
+// ===================== EXPORT CHAT =====================
+function exportChat() {
+    const msgs = document.querySelectorAll('#chat .message');
+    let text = '# Claw IDE Chat Export\n\n';
+    msgs.forEach(m => {
+        const role = m.classList.contains('user') ? 'User' : 'Agent';
+        text += `## ${role}\n${m.innerText}\n\n`;
+    });
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'claw-chat-' + Date.now() + '.md';
+    a.click();
+    showToast('Chat exported', 'success');
 }
 
 // ===================== RESIZABLE PANES =====================
 function initResizer() {
-    const handle = document.getElementById("resizeHandle");
-    if (!handle) return;
-    const chatSec = document.getElementById("chatSection");
+    const handle = document.getElementById('resizeHandle');
+    const chatSec = document.getElementById('chatSection');
     let dragging = false;
-    handle.addEventListener("mousedown", () => { dragging = true; handle.classList.add('active'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; });
-    document.addEventListener("mousemove", e => {
+
+    handle.addEventListener('mousedown', () => {
+        dragging = true;
+        handle.classList.add('active');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    });
+    document.addEventListener('mousemove', e => {
         if (!dragging) return;
         const rect = handle.parentElement.getBoundingClientRect();
         const newW = e.clientX - rect.left;
-        if (newW >= 320 && newW <= rect.width - 280) {
+        if (newW >= 280 && newW <= rect.width - 240) {
             chatSec.style.flex = 'none';
             chatSec.style.width = newW + 'px';
         }
     });
-    document.addEventListener("mouseup", () => { if (dragging) { dragging = false; handle.classList.remove('active'); document.body.style.cursor = ''; document.body.style.userSelect = ''; } });
-}
-
-// ===================== MODELS =====================
-let loadedModels = {};
-async function loadModels() {
-    const select = document.getElementById("modelSelect");
-    const desc = document.getElementById("modelDesc");
-    if(!select) return;
-    try {
-        const res = await fetch("/api/models");
-        const data = await res.json();
-        select.innerHTML = '';
-        data.models.forEach(m => {
-            loadedModels[m.id] = m;
-            const opt = document.createElement("option");
-            opt.value = m.id;
-            opt.textContent = m.label;
-            if (m.active) opt.selected = true;
-            select.appendChild(opt);
-        });
-        if (data.active && loadedModels[data.active]) {
-            desc.textContent = loadedModels[data.active].description;
+    document.addEventListener('mouseup', () => {
+        if (dragging) {
+            dragging = false;
+            handle.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
         }
-    } catch (e) {
-        select.innerHTML = '<option value="">Error loading models</option>';
-    }
+    });
 }
-
-async function switchModel(modelId) {
-    if (!modelId) return;
-    const desc = document.getElementById("modelDesc");
-    if (loadedModels[modelId]) {
-        desc.textContent = loadedModels[modelId].description;
-    } else {
-        desc.textContent = "Switching...";
-    }
-    
-    try {
-        await fetch("/api/model", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ model: modelId })
-        });
-    } catch (e) {
-        desc.textContent = "Error saving model!";
-    }
-}
-
-// ===================== BOOT =====================
-document.addEventListener("DOMContentLoaded", () => {
-    loadModels();
-    loadFiles();
-    initResizer();
-    switchTab('preview');
-    promptInput.focus();
-    // Welcome terminal
-    const out = document.getElementById('terminalOutput');
-    if (out) {
-        out.innerHTML = '<div class="cmd-line">Claw IDE Terminal — type commands to run in agent_workspace/</div>';
-    }
-});

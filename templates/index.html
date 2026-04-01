@@ -4,57 +4,79 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Claw IDE — AI Coding Agent</title>
-    <meta name="description" content="Local Replit-style AI coding IDE with live preview, terminal, and file explorer">
-
-    <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
-    <!-- App Styles -->
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 
 <!-- ==================== SIDEBAR ==================== -->
-<div class="sidebar">
+<div class="sidebar" id="sidebar">
     <div class="sidebar-header">
-        <h1><i class="fa-solid fa-bolt"></i> Claw IDE</h1>
-        <div class="badge"><i class="fa-solid fa-shield-halved"></i> Sandbox Isolated</div>
+        <div class="logo-row">
+            <span class="logo-icon">⚡</span>
+            <span class="logo-text">Claw IDE</span>
+            <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar"><i class="fa-solid fa-bars"></i></button>
+        </div>
+        <div class="status-row">
+            <span class="badge-green"><i class="fa-solid fa-circle"></i> Agent Online</span>
+            <span class="badge-gray" id="turnCounter">0 turns</span>
+        </div>
     </div>
 
-    <div class="sidebar-actions">
-        <button class="new-chat-btn" onclick="clearChat()">
+    <!-- New Session -->
+    <div class="sidebar-section">
+        <button class="btn-primary w100" onclick="newSession()">
             <i class="fa-solid fa-plus"></i> New Session
         </button>
     </div>
 
     <!-- Model Selector -->
-    <div class="model-selector">
-        <div class="fe-header">
-            <span><i class="fa-solid fa-microchip"></i>&nbsp; Model</span>
-        </div>
-        <select id="modelSelect" onchange="switchModel(this.value)">
-            <option value="">Loading models...</option>
+    <div class="sidebar-section">
+        <div class="section-label"><i class="fa-solid fa-microchip"></i> Model</div>
+        <select id="modelSelect" onchange="switchModel(this.value)" class="styled-select">
+            <option value="">Loading...</option>
         </select>
         <div class="model-desc" id="modelDesc"></div>
+        <div class="model-tier" id="modelTier"></div>
     </div>
 
-    <div class="file-explorer">
-        <div class="fe-header">
-            <span><i class="fa-solid fa-folder-tree"></i>&nbsp; Files</span>
-            <button onclick="loadFiles()" title="Refresh files"><i class="fa-solid fa-arrows-rotate"></i></button>
+    <!-- Quick Actions -->
+    <div class="sidebar-section">
+        <div class="section-label"><i class="fa-solid fa-bolt"></i> Quick Start</div>
+        <div class="quick-actions">
+            <button onclick="quickPrompt('Build a modern landing page with hero section, features, and footer using dark glassmorphism design')">🌐 Landing Page</button>
+            <button onclick="quickPrompt('Create a real-time todo app with local storage, priorities, tags, and smooth animations')">✅ Todo App</button>
+            <button onclick="quickPrompt('Build a beautiful calculator with keyboard support and history log')">🧮 Calculator</button>
+            <button onclick="quickPrompt('Create a weather dashboard UI with city search, animated weather icons, and forecast cards')">🌤️ Weather UI</button>
+            <button onclick="quickPrompt('Build a markdown editor with live preview, toolbar, and syntax highlighting')">📝 MD Editor</button>
+            <button onclick="quickPrompt('Create a REST API with Flask: endpoints for users, auth (JWT), and CRUD operations')">🔌 Flask API</button>
+        </div>
+    </div>
+
+    <!-- File Explorer -->
+    <div class="sidebar-section file-section">
+        <div class="section-label">
+            <span><i class="fa-solid fa-folder-tree"></i> Files</span>
+            <div class="fe-actions">
+                <button onclick="showNewFileDialog()" title="New file"><i class="fa-solid fa-file-plus"></i></button>
+                <button onclick="loadFiles()" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
+            </div>
         </div>
         <div class="fe-list" id="fileList">
-            <div style="padding:10px;font-size:12px;color:var(--text-dimmer)">Loading...</div>
+            <div class="fe-empty">Workspace empty</div>
         </div>
     </div>
 
+    <!-- Stats -->
     <div class="sidebar-footer">
-        <div>⚡ Claw IDE v2.0</div>
-        <div>Powered by OpenRouter</div>
-        <div>Antigravity Framework</div>
+        <div class="stat-row">
+            <span><i class="fa-solid fa-message"></i> <span id="historyCount">0</span> msgs</span>
+            <span><i class="fa-solid fa-file-code"></i> <span id="fileCount">0</span> files</span>
+        </div>
+        <div class="version-row">Claw IDE v3.0 · OpenRouter</div>
     </div>
 </div>
 
@@ -63,36 +85,57 @@
 
     <!-- Chat Pane -->
     <div class="chat-section" id="chatSection">
-        <div class="header">
-            <div><i class="fa-solid fa-robot"></i>&nbsp; AI Agent</div>
-            <div class="status"><i class="fa-solid fa-circle"></i> Online · Sandbox Active</div>
-        </div>
-
-        <div class="chat-container" id="chat">
-            <div class="message agent">
-                <p><strong>👋 Welcome to Claw IDE</strong></p>
-                <p>I'm your autonomous AI coding agent. I operate inside a <strong>secure sandbox</strong> — your system files are completely safe.</p>
-                <p>I can build entire systems for you. Try:</p>
-                <ul>
-                    <li><em>"Build a modern portfolio website with animations"</em></li>
-                    <li><em>"Create a to-do app with local storage and dark mode"</em></li>
-                    <li><em>"Run npm init -y and install express, then build an API server"</em></li>
-                    <li><em>"Build a full login system with HTML, CSS, and JavaScript"</em></li>
-                </ul>
-                <p style="margin-top:8px;font-size:13px;color:var(--text-dim)">Use the <strong>Terminal</strong> tab on the right to run commands directly. Use the <strong>Preview</strong> tab to see your app live.</p>
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <i class="fa-solid fa-robot"></i>
+                <span>AI Agent</span>
+                <div class="agent-status" id="agentStatus">
+                    <span class="status-dot green"></span> Ready
+                </div>
+            </div>
+            <div class="chat-header-right">
+                <button class="icon-btn" onclick="exportChat()" title="Export chat"><i class="fa-solid fa-download"></i></button>
+                <button class="icon-btn" onclick="clearChat()" title="Clear messages"><i class="fa-solid fa-trash"></i></button>
             </div>
         </div>
 
-        <div class="loading-overlay" id="loading">
-            <i class="fa-solid fa-circle-notch spinner"></i> Agent is working...
+        <div class="chat-container" id="chat">
+            <div class="welcome-card">
+                <div class="welcome-icon">⚡</div>
+                <h2>Claw IDE — AI Coding Agent</h2>
+                <p>I'm your autonomous coding agent. I can build entire applications, debug code, run commands, and manage files — all inside a secure sandbox.</p>
+                <div class="welcome-tips">
+                    <span>🧠 Multi-step reasoning</span>
+                    <span>🔧 Real tool execution</span>
+                    <span>💾 Session memory</span>
+                    <span>⚡ Live preview</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step Indicator -->
+        <div class="step-bar" id="stepBar">
+            <div class="step-bar-inner" id="stepBarInner">
+                <i class="fa-solid fa-circle-notch spinner"></i>
+                <span id="stepLabel">Agent working...</span>
+            </div>
         </div>
 
         <div class="input-wrapper">
-            <div class="input-container">
-                <textarea id="prompt" placeholder="Tell the agent what to build... (Enter to send, Shift+Enter for new line)"></textarea>
-                <button class="send-btn" id="sendBtn" onclick="sendPrompt()">
-                    <i class="fa-solid fa-paper-plane"></i>
-                </button>
+            <div class="input-hints" id="inputHints">
+                <span onclick="quickPrompt('List all files in the workspace and explain what each does')">📋 Explore files</span>
+                <span onclick="quickPrompt('Optimize and refactor all code in the workspace for performance')">⚡ Optimize code</span>
+                <span onclick="quickPrompt('Add dark mode toggle to the existing app')">🌙 Dark mode</span>
+                <span onclick="quickPrompt('Write a comprehensive README.md for this project')">📖 Write README</span>
+            </div>
+            <div class="input-container" id="inputContainer">
+                <textarea id="prompt" placeholder="Describe what to build or ask anything... (↵ send, ⇧↵ newline)"></textarea>
+                <div class="input-footer">
+                    <span class="char-count" id="charCount">0</span>
+                    <button class="send-btn" id="sendBtn" onclick="sendPrompt()">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -102,8 +145,6 @@
 
     <!-- Right Panel -->
     <div class="right-panel">
-
-        <!-- Tabs -->
         <div class="panel-tabs">
             <button class="panel-tab active" id="tab-preview" onclick="switchTab('preview')">
                 <i class="fa-solid fa-globe"></i> Preview
@@ -114,45 +155,86 @@
             <button class="panel-tab" id="tab-editor" onclick="switchTab('editor')">
                 <i class="fa-solid fa-code"></i> Editor
             </button>
+            <button class="panel-tab" id="tab-diff" onclick="switchTab('diff')" style="display:none">
+                <i class="fa-solid fa-code-compare"></i> Diff
+            </button>
             <div class="panel-actions">
                 <button onclick="refreshBrowser()" title="Refresh Preview"><i class="fa-solid fa-rotate-right"></i></button>
                 <button onclick="openInNewTab()" title="Open in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
             </div>
         </div>
 
-        <!-- Preview Panel -->
+        <!-- Preview -->
         <div class="preview-panel active" id="preview-panel">
             <div class="preview-bar">
                 <div class="preview-dots">
-                    <span class="dot-red"></span>
-                    <span class="dot-yellow"></span>
-                    <span class="dot-green"></span>
+                    <span class="dot dot-red"></span>
+                    <span class="dot dot-yellow"></span>
+                    <span class="dot dot-green"></span>
                 </div>
-                <input type="text" id="browserUrl" value="/workspace/index.html"
-                    onkeydown="if(event.key==='Enter') refreshBrowser()">
-                <button onclick="refreshBrowser()" title="Refresh"><i class="fa-solid fa-rotate-right"></i></button>
-                <button onclick="openInNewTab()" title="New Tab"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+                <input type="text" id="browserUrl" value="/workspace/index.html" onkeydown="if(event.key==='Enter') refreshBrowser()">
+                <button onclick="refreshBrowser()"><i class="fa-solid fa-rotate-right"></i></button>
+                <button onclick="openInNewTab()"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
             </div>
             <iframe src="/workspace/index.html" class="preview-iframe" id="previewFrame"
-                title="Live Preview" sandbox="allow-scripts allow-same-origin allow-forms allow-modals"></iframe>
+                title="Live Preview" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
         </div>
 
-        <!-- Terminal Panel -->
+        <!-- Terminal -->
         <div class="terminal-panel" id="terminal-panel">
-            <div class="terminal-output" id="terminalOutput"></div>
+            <div class="terminal-toolbar">
+                <span class="term-title"><i class="fa-solid fa-terminal"></i> Workspace Terminal</span>
+                <button onclick="clearTerminal()" title="Clear"><i class="fa-solid fa-eraser"></i></button>
+            </div>
+            <div class="terminal-output" id="terminalOutput">
+                <div class="term-welcome">Claw IDE Terminal — commands run inside <strong>agent_workspace/</strong></div>
+            </div>
             <div class="terminal-input-row">
                 <span class="prompt-char">$</span>
-                <input type="text" id="terminalInput" placeholder="Run any command (npm, pip, python, ls...)..." autocomplete="off" autocorrect="off" spellcheck="false">
+                <input type="text" id="terminalInput" placeholder="npm install, pip install, python script.py..." autocomplete="off" spellcheck="false">
+                <button class="term-run-btn" onclick="runTerminalFromBtn()"><i class="fa-solid fa-play"></i></button>
             </div>
         </div>
 
-        <!-- Code Editor / File Viewer Panel -->
+        <!-- Editor -->
         <div class="editor-panel" id="editor-panel">
-            <div class="editor-header" id="editorHeader">No file selected — click a file in the sidebar</div>
-            <div class="editor-content" id="editorContent"></div>
+            <div class="editor-toolbar">
+                <span class="editor-filename" id="editorFilename">No file open</span>
+                <div class="editor-actions">
+                    <span class="editor-lang" id="editorLang"></span>
+                    <button onclick="saveCurrentFile()" id="saveBtn" class="save-btn" style="display:none" title="Save file">
+                        <i class="fa-solid fa-floppy-disk"></i> Save
+                    </button>
+                    <button onclick="closeEditor()" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+            <div class="editor-wrap">
+                <div class="line-numbers" id="lineNumbers"></div>
+                <textarea class="editor-textarea" id="editorTextarea" spellcheck="false" oninput="onEditorChange()"></textarea>
+            </div>
         </div>
 
     </div>
+</div>
+
+<!-- ==================== NEW FILE DIALOG ==================== -->
+<div class="modal-overlay" id="newFileModal" onclick="hideNewFileDialog(event)">
+    <div class="modal">
+        <div class="modal-title"><i class="fa-solid fa-file-plus"></i> New File</div>
+        <input type="text" class="modal-input" id="newFilePath" placeholder="e.g. index.html or src/app.js" autofocus>
+        <div class="modal-actions">
+            <button class="btn-ghost" onclick="hideNewFileDialog()">Cancel</button>
+            <button class="btn-primary" onclick="createNewFile()">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== CONTEXT MENU ==================== -->
+<div class="ctx-menu" id="ctxMenu">
+    <div onclick="ctxOpen()"><i class="fa-solid fa-eye"></i> Open</div>
+    <div onclick="ctxPreview()"><i class="fa-solid fa-globe"></i> Preview</div>
+    <div class="ctx-sep"></div>
+    <div onclick="ctxDelete()" class="ctx-danger"><i class="fa-solid fa-trash"></i> Delete</div>
 </div>
 
 <script src="/static/js/main.js"></script>
