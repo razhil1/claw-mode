@@ -9,8 +9,8 @@ from src.llm import CODING_MODELS, DEFAULT_MODEL
 
 app = Flask(__name__)
 
-if "OPENROUTER_API_KEY" not in os.environ:
-    os.environ["OPENROUTER_API_KEY"] = "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"
+if not os.environ.get("OPENROUTER_API_KEY"):
+    print("WARNING: OPENROUTER_API_KEY is not set. AI features will be unavailable.")
 
 WORKSPACE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "agent_workspace"))
 os.makedirs(WORKSPACE_DIR, exist_ok=True)
