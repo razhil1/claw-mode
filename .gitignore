@@ -1,0 +1,15 @@
+__pycache__/
+archive/
+.omx/
+.clawd-agents/
+# Claude Code local artifacts
+.claude/settings.local.json
+.claude/sessions/
+agent_workspace/
+venv/
+.env
+*.pyc
+*.pyo
+.idea/
+.vscode/
+node_modules/

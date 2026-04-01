@@ -1,0 +1,9 @@
+{
+  "session_id": "f9381836e2a84a43b199de7393e3a91c",
+  "messages": [
+    "Execute BashTool with 'ls src' and tell me what you see.",
+    "Execute BashTool with 'ls src' and tell me what you see."
+  ],
+  "input_tokens": 22,
+  "output_tokens": 85
+}

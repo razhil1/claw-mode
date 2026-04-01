@@ -1,0 +1,9 @@
+{
+  "session_id": "da76fab436244027acaa2eaa14196080",
+  "messages": [
+    "read a file and summarize it",
+    "read a file and summarize it"
+  ],
+  "input_tokens": 12,
+  "output_tokens": 38
+}

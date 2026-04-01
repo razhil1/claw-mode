@@ -1,0 +1,9 @@
+{
+  "session_id": "bc38bd3b37474503827653d4991085c9",
+  "messages": [
+    "Explain what files build_port_manifest reads in the current workspace",
+    "Explain what files build_port_manifest reads in the current workspace"
+  ],
+  "input_tokens": 18,
+  "output_tokens": 22
+}
