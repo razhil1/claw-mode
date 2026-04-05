@@ -29,8 +29,15 @@ def count_tokens(text: str) -> int:
 _runtime_keys: dict[str, str] = {}
 _runtime_keys_lock = threading.Lock()
 
-# Persistent key file stored in the user home directory (NOT the workspace).
-# This file never appears in the project directory and won't be committed.
+# ── NVIDIA API key loading priority ─────────────────────────────────────────
+# 1. NVIDIA_API_KEY environment variable (set via Replit Secrets → Tools → Secrets
+#    in the Replit dashboard, which injects it as a persistent env var).  This is
+#    the recommended platform approach and takes highest priority.
+# 2. Runtime cache (_runtime_keys dict) populated on first successful lookup.
+# 3. Persistent file ~/.config/nexus/api_key — fallback when no env var is set.
+#    Stored outside the workspace (home dir), owner-only 0o600 permissions, and
+#    never committed to git.  Used when the user provides the key via the IDE
+#    settings panel rather than Replit Secrets.
 _KEY_FILE = os.path.join(os.path.expanduser("~"), ".config", "nexus", "api_key")
 
 
