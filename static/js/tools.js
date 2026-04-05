@@ -256,7 +256,7 @@ async function refreshDocker() {
                             <span class="docker-item-meta">${escapeHtml(c.image)} · ${escapeHtml(c.status)}</span>
                             ${c.ports ? `<span class="docker-item-ports">${escapeHtml(c.ports)}</span>` : ''}
                         </div>
-                        ${isRunning ? `<button class="docker-stop-btn" onclick="dockerStopContainer('${escapeHtml(c.name)}')"><i class="fa-solid fa-stop"></i></button>` : ''}
+                        ${isRunning ? `<button class="docker-stop-btn" style="margin-right:4px;" onclick="dockerExecContainer('${escapeHtml(c.name)}')"><i class="fa-solid fa-terminal"></i></button><button class="docker-stop-btn" onclick="dockerStopContainer('${escapeHtml(c.name)}')"><i class="fa-solid fa-stop"></i></button>` : ''}
                     </div>`;
                 }).join('');
             }
@@ -329,6 +329,27 @@ async function dockerStopContainer(name) {
         showToast(data.ok ? `Stopped ${name}` : (data.message || 'Stop failed'), data.ok ? 'success' : 'error');
         refreshDocker();
     } catch (e) { showToast('Error: ' + e.message, 'error'); }
+}
+
+async function dockerExecContainer(name) {
+    const cmd = prompt(`Run command in container "${name}":`, 'ps aux');
+    if (!cmd) return;
+    showToast(`Running in ${name}…`, 'info');
+    try {
+        const res = await fetch('/api/docker/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, cmd })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            showToast(`exec completed`, 'success');
+            appendOutputLine(data.output || '', 'docker');
+        } else {
+            showToast(data.error || data.message || 'exec failed', 'error');
+            appendOutputLine(data.error || '', 'error');
+        }
+    } catch (e) { showToast('Docker exec error: ' + e.message, 'error'); }
 }
 
 // Auto-refresh Docker when panel opens

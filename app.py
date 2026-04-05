@@ -1316,6 +1316,44 @@ def docker_logs() -> Response:
     return _ok(output=out, container=name)
 
 
+@app.route("/api/docker/exec", methods=["POST"])
+def docker_exec() -> Response:
+    """Run a command inside a running container (strict allowlist)."""
+    data = request.json or {}
+    name = data.get("name", "").strip()
+    cmd  = data.get("cmd", "").strip()
+
+    if not name:
+        return _error("'name' is required", code="NO_NAME")
+    if not cmd:
+        return _error("'cmd' is required", code="NO_CMD")
+
+    # Validate container name
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", name):
+        return _error("Invalid container name", code="INVALID_NAME")
+
+    # Strict command allowlist — only safe read/inspect commands
+    _ALLOWED_EXEC_CMDS = {
+        "sh", "bash", "ls", "pwd", "env", "cat", "echo",
+        "ps", "top", "df", "du", "whoami", "id",
+        "python", "python3", "node", "npm", "pip",
+    }
+    cmd_base = cmd.split()[0] if cmd.split() else ""
+    if cmd_base not in _ALLOWED_EXEC_CMDS:
+        return _error(
+            f"Command '{cmd_base}' is not in the exec allowlist.",
+            code="CMD_NOT_ALLOWED",
+        )
+
+    if not _docker_available():
+        return _error("Docker daemon not available", code="DOCKER_UNAVAILABLE")
+
+    # Build safe exec command: docker exec <container> <cmd>
+    safe_cmd = f"docker exec {shlex.quote(name)} {cmd} 2>&1"
+    out = tool_bash_run(safe_cmd)
+    return _ok(output=out, container=name, cmd=cmd)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES — DATABASE EXPLORER
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1367,9 +1405,16 @@ def db_connect() -> Response:
             return _error("psycopg2 not installed. Run: pip install psycopg2-binary", code="NO_PSYCOPG2")
         except Exception as exc:
             return _error(f"Cannot connect to PostgreSQL: {exc}", code="DB_CONNECT_FAILED")
+        # Mask credentials in the display name (never return raw URL to frontend)
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(target)
+            display_name = f"pg://{parsed.hostname or '?'}:{parsed.port or 5432}{parsed.path or '/'}"
+        except Exception:
+            display_name = "postgresql://***"
         with _db_lock:
-            _db_connections[conn_id] = {"type": "pg", "url": target, "name": target[:40]}
-        return _ok(conn_id=conn_id, type="pg", name=target[:40])
+            _db_connections[conn_id] = {"type": "pg", "url": target, "name": display_name}
+        return _ok(conn_id=conn_id, type="pg", name=display_name)
 
     return _error(f"Unsupported database type: {db_type!r}. Use 'sqlite' or 'postgres'.", code="UNKNOWN_TYPE")
 
