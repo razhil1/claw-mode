@@ -1020,8 +1020,9 @@ class ClawAgent:
             if thought:
                 yield {"type": "thought", "text": thought}
 
-            # ── PLAN extraction (turn 0 only) ─────────────────────────────────
-            if turn == 0:
+            # ── PLAN extraction ────────────────────────────────────────────────
+            # Try extracting a plan on any turn until one is confirmed.
+            if not plan_emitted:
                 plan = _extract_plan(response_text)
                 if plan:
                     plan_emitted = True
@@ -1034,10 +1035,9 @@ class ClawAgent:
                         yield {"type": "plan_steps", "steps": plan_steps}
                 else:
                     # ── MANDATORY PLANNING GATE ───────────────────────────────
-                    # On turn 0, if the model produced no PLAN: block, demand
-                    # one before allowing any tool execution or completion.
-                    # This covers both the "jumped straight to tools" case and
-                    # the "returned prose with no plan then stopped" case.
+                    # Until a PLAN: block is confirmed, block ALL tool execution
+                    # and completion — re-prompt on every turn until the model
+                    # provides a proper numbered plan.
                     yield {
                         "type": "thinking",
                         "text": "Planning phase required — requesting plan before execution…",

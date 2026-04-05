@@ -1121,6 +1121,7 @@ class UltraWorker:
         step_index:         int       = 0
         commands_run:       list[str] = []
         errors_encountered: list[str] = []
+        plan_emitted:       bool      = False
 
         _WRITE_TOOLS = {"FileEditTool", "FilePatchTool", "FileDeleteTool",
                         "BashTool", "WorkspaceZipTool", "WorkspaceUnzipTool"}
@@ -1186,10 +1187,13 @@ class UltraWorker:
             if thought:
                 yield {"type": "thought", "text": thought}
 
-            # ── PLAN extraction (first turn) ──────────────────────────────────
-            if turn == 0:
+            # ── PLAN extraction (persistent gate until plan confirmed) ───────────
+            # Try extracting a plan on every turn until one is confirmed.
+            # Tool execution and completion are blocked until plan_emitted = True.
+            if not plan_emitted:
                 plan = extract_plan(response)
                 if plan:
+                    plan_emitted = True
                     yield {"type": "plan", "text": plan}
                     steps = re.findall(r"^\s*\d+[\.\)]\s+(.+)$", plan, re.MULTILINE)
                     if steps:
@@ -1197,9 +1201,8 @@ class UltraWorker:
                         plan_steps.extend(steps)
                         yield {"type": "plan_steps", "steps": plan_steps}
                 else:
-                    # Mandatory planning gate: turn 0 must produce a PLAN: block.
-                    # This is enforced unconditionally — whether the model returned
-                    # tool calls, prose, or a DONE signal without a plan.
+                    # Mandatory planning gate: no plan yet — block and re-prompt.
+                    # Covers the "jumped to tools", "prose only", and "DONE without plan" cases.
                     yield {
                         "type": "thinking",
                         "text": "Planning phase required — requesting plan before execution…",
@@ -1430,30 +1433,35 @@ class UltraWorker:
                 # Collect real errors
                 if not tr.success:
                     errors_encountered.append(f"{tr.tool}: {tr.output[:150]}")
-                # Emit step_done / step_failed for tracked plan step
-                if plan_steps and step_index < len(plan_steps):
-                    if tr.success:
-                        yield {
-                            "type":  "step_done",
-                            "index": step_index,
-                            "label": plan_steps[step_index],
-                        }
-                    else:
-                        yield {
-                            "type":    "step_failed",
-                            "index":   step_index,
-                            "label":   plan_steps[step_index],
-                            "error":   tr.output[:200],
-                            "attempt": tr.attempt,
-                        }
-                    if tr.success or tr.attempt >= MAX_RETRIES:
-                        step_index += 1
                 hint = state.record(tr)
                 if hint:
                     yield {"type": "recovery", "message": hint}
                 result_msgs.append(
                     f"[{tr.tool} ▶ Result]\n{tr.output}" + (f"\n{hint}" if hint else "")
                 )
+
+            # ── step tracking: one advancement per turn, not per tool result ──
+            # A single plan step corresponds to one agent turn (whether single or parallel).
+            if plan_steps and step_index < len(plan_steps):
+                all_ok = all(tr.success for tr in results)
+                final_attempt = max((tr.attempt for tr in results), default=1)
+                if all_ok:
+                    yield {
+                        "type":  "step_done",
+                        "index": step_index,
+                        "label": plan_steps[step_index],
+                    }
+                else:
+                    worst = next((tr for tr in results if not tr.success), results[0])
+                    yield {
+                        "type":    "step_failed",
+                        "index":   step_index,
+                        "label":   plan_steps[step_index],
+                        "error":   worst.output[:200],
+                        "attempt": final_attempt,
+                    }
+                if all_ok or final_attempt >= MAX_RETRIES:
+                    step_index += 1
 
             # ── update context + optional compression ─────────────────────────
             ctx.add_turn(TurnRecord(
