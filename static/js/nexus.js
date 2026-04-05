@@ -438,18 +438,53 @@ function _setupResize(handleId, targetId, dir, min, max) {
 }
 
 // ─── Deploy ──────────────────────────────────────────────────────────────────
-function deployTo(target) {
+async function deployTo(target) {
     const log = document.getElementById('deployLog');
-    if (log) {
-        log.innerHTML = `<div class="deploy-step"><i class="fa-solid fa-spinner fa-spin"></i> Deploying to <strong>${target}</strong>...</div>`;
-        setTimeout(() => {
-            log.innerHTML += `<div class="deploy-step success"><i class="fa-solid fa-check"></i> Build completed</div>`;
-            setTimeout(() => {
-                log.innerHTML += `<div class="deploy-step success"><i class="fa-solid fa-check"></i> Deployed to ${target} successfully! 🚀</div>`;
-            }, 1200);
-        }, 1500);
+    const _log = (html, cls='') => {
+        if (log) log.innerHTML += `<div class="deploy-step ${cls}">${html}</div>`;
+    };
+
+    if (log) log.innerHTML = '';
+    _log(`<i class="fa-solid fa-spinner fa-spin"></i> Starting deployment to <strong>${target}</strong>…`);
+    showToast(`Deploying to ${target}…`, 'info');
+
+    try {
+        let endpoint, body = {};
+
+        if (target === 'git') {
+            endpoint = '/api/deploy/push';
+            const msg = prompt('Commit message (optional):');
+            if (msg) body.commit_message = msg;
+        } else if (target === 'netlify') {
+            endpoint = '/api/deploy/netlify';
+        } else if (target === 'vercel') {
+            endpoint = '/api/deploy/vercel';
+        } else {
+            _log(`<i class="fa-solid fa-times-circle"></i> Unknown deploy target: ${escapeHtml(target)}`, 'error');
+            return;
+        }
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+            _log(`<i class="fa-solid fa-check"></i> Deployment succeeded`, 'success');
+            if (data.output) {
+                _log(`<pre style="font-size:11px;white-space:pre-wrap;margin:6px 0 0;">${escapeHtml(data.output.slice(0, 2000))}</pre>`);
+            }
+            showToast(`Deployed to ${target} ✓`, 'success');
+        } else {
+            _log(`<i class="fa-solid fa-times-circle"></i> ${escapeHtml(data.error || 'Deployment failed')}`, 'error');
+            showToast(`Deploy failed: ${data.error || 'unknown error'}`, 'error');
+        }
+    } catch (err) {
+        _log(`<i class="fa-solid fa-times-circle"></i> Network error: ${escapeHtml(err.message)}`, 'error');
+        showToast('Deploy request failed', 'error');
     }
-    showToast(`Deploying to ${target}...`, 'info');
 }
 
 function showNotifications() {

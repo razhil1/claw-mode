@@ -28,6 +28,8 @@ import io
 import json
 import logging
 import os
+import re
+import shlex
 import shutil
 import threading
 import time
@@ -1145,15 +1147,21 @@ def deploy_status() -> Response:
 def deploy_push() -> Response:
     """Push current branch to remote origin."""
     data   = request.json or {}
-    remote = data.get("remote", "origin")
+    # Allowlist remote to alphanumeric/dash/dot
+    remote_raw = data.get("remote", "origin")
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", remote_raw):
+        return _error("Invalid remote name", code="INVALID_REMOTE")
+    remote = remote_raw
+
     branch = tool_bash_run("git rev-parse --abbrev-ref HEAD 2>&1").strip()
     # Stage & commit any unstaged changes if a message is provided
     commit_msg = data.get("commit_message", "").strip()
     out_lines = []
     if commit_msg:
         out_lines.append(tool_bash_run("git add -A 2>&1"))
-        out_lines.append(tool_bash_run(f'git commit -m "{commit_msg}" 2>&1'))
-    out_lines.append(tool_bash_run(f"git push {remote} {branch} 2>&1"))
+        # Use shlex.quote so the message cannot inject shell commands
+        out_lines.append(tool_bash_run(f"git commit -m {shlex.quote(commit_msg)} 2>&1"))
+    out_lines.append(tool_bash_run(f"git push {shlex.quote(remote)} {shlex.quote(branch)} 2>&1"))
     return _ok(output="\n".join(out_lines), branch=branch, remote=remote)
 
 
@@ -1243,12 +1251,20 @@ def docker_status() -> Response:
 def docker_build() -> Response:
     """Run docker build in the workspace."""
     data  = request.json or {}
-    tag   = data.get("tag", "nexus-app:latest").strip()
-    ctx   = data.get("context", ".").strip()
+    tag_raw = data.get("tag", "nexus-app:latest").strip()
+    ctx_raw = data.get("context", ".").strip()
+
+    # Validate docker tag: alphanumeric plus :/._- only
+    if not re.fullmatch(r"[A-Za-z0-9:._/-]{1,128}", tag_raw):
+        return _error("Invalid docker tag", code="INVALID_TAG")
+    # Validate context path: must be relative and not escape workspace
+    if ".." in ctx_raw or ctx_raw.startswith("/"):
+        return _error("Invalid build context path", code="INVALID_CTX")
+
     if not _docker_available():
         return _error("Docker daemon not available", code="DOCKER_UNAVAILABLE")
-    out = tool_bash_run(f"docker build -t {tag} {ctx} 2>&1")
-    return _ok(output=out, tag=tag)
+    out = tool_bash_run(f"docker build -t {shlex.quote(tag_raw)} {shlex.quote(ctx_raw)} 2>&1")
+    return _ok(output=out, tag=tag_raw)
 
 
 @app.route("/api/docker/compose", methods=["POST"])
@@ -1267,7 +1283,10 @@ def docker_stop() -> Response:
     name = data.get("name", "").strip()
     if not name:
         return _error("'name' is required", code="NO_NAME")
-    out = tool_bash_run(f"docker stop {name} 2>&1")
+    # Validate container name: Docker allows alphanumeric, dash, underscore, dot
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", name):
+        return _error("Invalid container name", code="INVALID_NAME")
+    out = tool_bash_run(f"docker stop {shlex.quote(name)} 2>&1")
     return _ok(output=out, container=name)
 
 
@@ -1284,10 +1303,16 @@ def docker_prune() -> Response:
 def docker_logs() -> Response:
     """Get logs from a container."""
     name  = request.args.get("name", "").strip()
-    lines = int(request.args.get("lines", 100))
+    try:
+        lines = max(1, min(int(request.args.get("lines", 100)), 2000))
+    except ValueError:
+        lines = 100
     if not name:
         return _error("'name' query parameter is required", code="NO_NAME")
-    out = tool_bash_run(f"docker logs --tail {lines} {name} 2>&1")
+    # Validate container name
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", name):
+        return _error("Invalid container name", code="INVALID_NAME")
+    out = tool_bash_run(f"docker logs --tail {lines} {shlex.quote(name)} 2>&1")
     return _ok(output=out, container=name)
 
 

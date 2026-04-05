@@ -650,10 +650,21 @@ def execute_tool(tool: str, raw: str, root: Path) -> ToolResult:
             out = _ws_bash(f"git {payload}", root)
 
         elif tool == "WorkspaceZipTool":
-            out = tool_workspace_zip(payload or "workspace_backup.zip")
+            # tool_workspace_zip() returns bytes; save to file in workspace root
+            zip_bytes = tool_workspace_zip()
+            name = payload or "workspace_backup.zip"
+            dest = root / name
+            dest.write_bytes(zip_bytes)
+            out = f"Success: Workspace backed up to '{name}' ({len(zip_bytes):,} bytes)."
 
         elif tool == "WorkspaceUnzipTool":
-            out = tool_workspace_unzip(payload or "workspace_backup.zip")
+            # payload is a filename inside the workspace root
+            name = payload or "workspace_backup.zip"
+            src_file = root / name
+            if not src_file.exists():
+                out = f"Error: '{name}' not found in workspace."; ok = False
+            else:
+                out = tool_workspace_unzip(src_file.read_bytes())
             
         else:
             out = (
