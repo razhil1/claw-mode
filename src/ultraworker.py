@@ -1155,24 +1155,24 @@ class UltraWorker:
                         plan_steps.extend(steps)
                         yield {"type": "plan_steps", "steps": plan_steps}
                 else:
-                    # Mandatory planning gate: if no plan on turn 0, demand one
-                    tool_calls_t0 = parse_tools(response)
-                    if tool_calls_t0:
-                        yield {
-                            "type": "thinking",
-                            "text": "Planning phase required — requesting plan before execution…",
-                        }
-                        ctx._raw.append({"role": "assistant",
-                                         "content": response.strip() or "(empty)"})
-                        ctx._raw.append({
-                            "role":    "user",
-                            "content": (
-                                "[System] You must output a PLAN: block with numbered steps "
-                                "BEFORE issuing any tool calls. Please produce your plan now."
-                            ),
-                        })
-                        full_content.append(response)
-                        continue
+                    # Mandatory planning gate: turn 0 must produce a PLAN: block.
+                    # This is enforced unconditionally — whether the model returned
+                    # tool calls, prose, or a DONE signal without a plan.
+                    yield {
+                        "type": "thinking",
+                        "text": "Planning phase required — requesting plan before execution…",
+                    }
+                    ctx._raw.append({"role": "assistant",
+                                     "content": response.strip() or "(empty)"})
+                    ctx._raw.append({
+                        "role":    "user",
+                        "content": (
+                            "[System] You must output a PLAN: block with numbered steps "
+                            "BEFORE issuing any tool calls or finishing. Please produce your plan now."
+                        ),
+                    })
+                    full_content.append(response)
+                    continue
 
             # ── parse tools ───────────────────────────────────────────────────
             calls = parse_tools(response)
@@ -1311,10 +1311,50 @@ class UltraWorker:
 
             else:
                 # Parallel multi-tool execution
+                # Filter out write tools in read-only mode before dispatch
+                if _read_only:
+                    allowed, blocked = [], []
+                    for t, p in calls:
+                        if t in _WRITE_TOOLS:
+                            blocked.append((t, p))
+                        else:
+                            allowed.append((t, p))
+                    for t, p in blocked:
+                        block_msg = (
+                            f"[Read-only mode] Tool '{t}' is not permitted in "
+                            f"{mode_override or 'current'} mode. Only read/search tools are allowed."
+                        )
+                        errors_encountered.append(block_msg)
+                        yield {"type": "tool_result", "tool": t, "result": block_msg,
+                               "elapsed": 0.0, "success": False, "attempt": 1}
+                    calls = allowed
+
+                if not calls:
+                    # All tools were blocked — feed a message and continue
+                    ctx._raw.append({"role": "assistant",
+                                     "content": response.strip() or "(empty)"})
+                    ctx._raw.append({"role": "user",
+                                     "content": "[System] All requested tools were blocked by read-only mode."})
+                    full_content.append(response)
+                    continue
+
                 yield {"type": "thinking", "text": f"⚡ Parallel: {len(calls)} tools"}
+
+                # Emit step_start for first plan step before parallel dispatch
+                if plan_steps and step_index < len(plan_steps):
+                    yield {
+                        "type":  "step_start",
+                        "index": step_index,
+                        "label": plan_steps[step_index],
+                        "tool":  calls[0][0] if calls else "",
+                    }
+
                 for t, p in calls:
                     self._snapshot_if_write(t, p, registry)
                     self._pretrack(t, p, tracker)
+                    # Track bash commands
+                    if t == "BashTool":
+                        commands_run.append(p[:120])
                     # Loop detection on all parallel tools
                     h = hashlib.md5(p[:200].encode()).hexdigest()[:8]
                     loop_guard.record(t, h)
