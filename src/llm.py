@@ -26,71 +26,31 @@ def count_tokens(text: str) -> int:
 
 
 # ===================== RUNTIME KEY STORE =====================
+# Keys are stored ONLY in os.environ and an in-process dict.
+# No plaintext key files — use Replit Secrets (NVIDIA_API_KEY) for persistence.
 _runtime_keys: dict[str, str] = {}
 _runtime_keys_lock = threading.Lock()
 
-# Path for persistent key storage (outside workspace sandbox)
-_KEY_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".claw_key")
 
-
-def _load_persisted_key() -> str:
-    """Load NVIDIA API key from persistent file on disk."""
-    try:
-        if os.path.exists(_KEY_FILE):
-            with open(_KEY_FILE, "r") as f:
-                key = f.read().strip()
-            if key:
-                return key
-    except Exception:
-        pass
-    return ""
-
-
-def _persist_key(key: str) -> None:
-    """Save NVIDIA API key to disk for persistence across restarts."""
-    try:
-        with open(_KEY_FILE, "w") as f:
-            f.write(key.strip())
-        os.chmod(_KEY_FILE, 0o600)  # owner-only read/write
-    except Exception:
-        pass
-
-
-def set_runtime_key(key: str):
+def set_runtime_key(key: str) -> None:
+    """
+    Store the NVIDIA API key for this process session.
+    This is session-only: for persistence across restarts, set NVIDIA_API_KEY
+    as a Replit Secret in the project settings.
+    """
+    key = key.strip()
     with _runtime_keys_lock:
         _runtime_keys["nvidia"] = key
-    # Also persist to disk so it survives restarts
-    _persist_key(key)
-    # And put it in os.environ for this process
     os.environ["NVIDIA_API_KEY"] = key
 
 
 def get_nvidia_key() -> str:
+    """Return the NVIDIA API key, checking runtime cache then os.environ."""
     with _runtime_keys_lock:
         runtime_key = _runtime_keys.get("nvidia", "")
     if runtime_key:
         return runtime_key
-    # Check environment variable
-    env_key = os.environ.get("NVIDIA_API_KEY", "")
-    if env_key:
-        return env_key
-    # Finally try persistent file
-    persisted = _load_persisted_key()
-    if persisted:
-        # Warm the runtime cache and env
-        with _runtime_keys_lock:
-            _runtime_keys["nvidia"] = persisted
-        os.environ["NVIDIA_API_KEY"] = persisted
-        return persisted
-    return ""
-
-
-# Load persisted key at import time so it's available immediately
-_boot_key = _load_persisted_key()
-if _boot_key and not os.environ.get("NVIDIA_API_KEY"):
-    os.environ["NVIDIA_API_KEY"] = _boot_key
-    with _runtime_keys_lock:
-        _runtime_keys["nvidia"] = _boot_key
+    return os.environ.get("NVIDIA_API_KEY", "")
 
 
 # ===================== NVIDIA MODEL CATALOG =====================

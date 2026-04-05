@@ -977,7 +977,7 @@ def multi_agent_stream() -> Response:
     Multi-agent streaming endpoint.
     Decomposes the prompt into sub-tasks and runs specialist agents in parallel.
     """
-    from src.multi_agent import UltraMultiAgentOrchestrator
+    from src.multi_agent import UltraMultiAgentOrchestrator, _INTERNAL_TOOLS_AVAILABLE
 
     data       = request.json or {}
     prompt     = data.get("prompt", "").strip()
@@ -986,6 +986,22 @@ def multi_agent_stream() -> Response:
 
     if not prompt:
         return _error("'prompt' is required", code="NO_PROMPT")
+
+    # Hard-fail early if toolbox import failed — emit blocking error event to UI
+    if not _INTERNAL_TOOLS_AVAILABLE:
+        def _error_stream():
+            msg = (
+                "Swarm mode is unavailable: toolbox or agent modules failed to import. "
+                "Check the server logs for the ImportError details. "
+                "File-system tools (read/write/edit) will not work until this is resolved."
+            )
+            yield f"data: {json.dumps({'type': 'error', 'message': msg, 'seq': 1})}\n\n"
+            yield "data: [DONE]\n\n"
+        return Response(
+            stream_with_context(_error_stream()),
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     orch = UltraMultiAgentOrchestrator(max_parallel=max_agents)
     _active_orchestrators[session_id] = orch
@@ -1121,7 +1137,13 @@ def api_set_key() -> Response:
         return _error("'key' is required", code="NO_KEY")
     set_runtime_key(key)
     os.environ["NVIDIA_API_KEY"] = key
-    return _ok(message="NVIDIA key saved for this session.")
+    return _ok(
+        message=(
+            "NVIDIA key saved for this session. "
+            "For persistence across restarts, set NVIDIA_API_KEY as a Replit Secret "
+            "in the project settings (Tools → Secrets)."
+        )
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1318,7 +1340,9 @@ def docker_logs() -> Response:
 
 @app.route("/api/docker/exec", methods=["POST"])
 def docker_exec() -> Response:
-    """Run a command inside a running container (strict allowlist)."""
+    """Run a command inside a running container (strict allowlist, no shell injection)."""
+    import subprocess as _subprocess
+
     data = request.json or {}
     name = data.get("name", "").strip()
     cmd  = data.get("cmd", "").strip()
@@ -1328,29 +1352,48 @@ def docker_exec() -> Response:
     if not cmd:
         return _error("'cmd' is required", code="NO_CMD")
 
-    # Validate container name
+    # Validate container name: Docker allows alphanumeric, dash, underscore, dot
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", name):
         return _error("Invalid container name", code="INVALID_NAME")
 
-    # Strict command allowlist — only safe read/inspect commands
+    # Strict command allowlist — explicitly excludes shell interpreters (bash/sh)
+    # to prevent metacharacter injection.
     _ALLOWED_EXEC_CMDS = {
-        "sh", "bash", "ls", "pwd", "env", "cat", "echo",
-        "ps", "top", "df", "du", "whoami", "id",
+        "ls", "pwd", "env", "cat", "echo",
+        "ps", "df", "du", "whoami", "id",
         "python", "python3", "node", "npm", "pip",
     }
-    cmd_base = cmd.split()[0] if cmd.split() else ""
+    # Parse the command into tokens (raises ValueError on malformed input)
+    try:
+        tokens = shlex.split(cmd)
+    except ValueError as exc:
+        return _error(f"Malformed command: {exc}", code="BAD_CMD")
+
+    if not tokens:
+        return _error("Empty command", code="NO_CMD")
+
+    cmd_base = tokens[0]
     if cmd_base not in _ALLOWED_EXEC_CMDS:
         return _error(
-            f"Command '{cmd_base}' is not in the exec allowlist.",
+            f"Command '{cmd_base}' is not in the exec allowlist. "
+            f"Allowed: {', '.join(sorted(_ALLOWED_EXEC_CMDS))}",
             code="CMD_NOT_ALLOWED",
         )
 
     if not _docker_available():
         return _error("Docker daemon not available", code="DOCKER_UNAVAILABLE")
 
-    # Build safe exec command: docker exec <container> <cmd>
-    safe_cmd = f"docker exec {shlex.quote(name)} {cmd} 2>&1"
-    out = tool_bash_run(safe_cmd)
+    # Use subprocess arg list — never shell=True so metacharacters can't escape
+    full_args = ["docker", "exec", name] + tokens
+    try:
+        result = _subprocess.run(
+            full_args, capture_output=True, text=True, timeout=30
+        )
+        out = (result.stdout + "\n" + result.stderr).strip()
+    except _subprocess.TimeoutExpired:
+        out = "Error: exec timed out after 30s"
+    except Exception as exc:
+        out = f"Error: {exc}"
     return _ok(output=out, container=name, cmd=cmd)
 
 
