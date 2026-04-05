@@ -367,7 +367,35 @@ def index() -> Response:
 @app.route("/workspace/")
 @app.route("/workspace/<path:filename>")
 def serve_workspace(filename: str = "index.html") -> Response:
-    return send_from_directory(WORKSPACE_DIR, filename)
+    target = (WORKSPACE_DIR / filename).resolve()
+    # Prevent path traversal
+    try:
+        target.relative_to(WORKSPACE_DIR)
+    except ValueError:
+        return _error("Access denied", 403, "TRAVERSAL")
+
+    if not target.exists():
+        # Return a friendly placeholder instead of a bare 404
+        placeholder = f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<title>Preview — {filename}</title>
+<style>
+  body{{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
+        min-height:100vh;margin:0;background:#0d1117;color:#c9d1d9;flex-direction:column;gap:16px;}}
+  .icon{{font-size:3rem;}}
+  h2{{margin:0;color:#e6edf3;}}
+  p{{margin:0;color:#8b949e;font-size:.9rem;}}
+  code{{background:#161b22;padding:2px 8px;border-radius:4px;font-size:.85rem;}}
+</style></head>
+<body>
+  <div class="icon">📄</div>
+  <h2>No preview available</h2>
+  <p>File <code>{filename}</code> does not exist in the workspace yet.</p>
+  <p>Ask the agent to create it, or open a different file.</p>
+</body></html>"""
+        return Response(placeholder, status=200, mimetype="text/html")
+
+    return send_from_directory(str(WORKSPACE_DIR), filename)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1092,6 +1120,389 @@ def api_set_key() -> Response:
     set_runtime_key(key)
     os.environ["NVIDIA_API_KEY"] = key
     return _ok(message="NVIDIA key saved for this session.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ROUTES — DEPLOY PANEL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/deploy/status")
+def deploy_status() -> Response:
+    """Return current deployment / git-remote status."""
+    remote = tool_bash_run("git remote -v 2>&1 || echo NO_GIT")
+    branch = tool_bash_run("git rev-parse --abbrev-ref HEAD 2>&1 || echo unknown")
+    last   = tool_bash_run("git log --oneline -3 2>&1 || echo NO_COMMITS")
+    dirty  = tool_bash_run("git status --short 2>&1")
+    return _ok(
+        remote=remote.strip(),
+        branch=branch.strip(),
+        recent_commits=last.strip(),
+        dirty_files=dirty.strip(),
+    )
+
+
+@app.route("/api/deploy/push", methods=["POST"])
+def deploy_push() -> Response:
+    """Push current branch to remote origin."""
+    data   = request.json or {}
+    remote = data.get("remote", "origin")
+    branch = tool_bash_run("git rev-parse --abbrev-ref HEAD 2>&1").strip()
+    # Stage & commit any unstaged changes if a message is provided
+    commit_msg = data.get("commit_message", "").strip()
+    out_lines = []
+    if commit_msg:
+        out_lines.append(tool_bash_run("git add -A 2>&1"))
+        out_lines.append(tool_bash_run(f'git commit -m "{commit_msg}" 2>&1'))
+    out_lines.append(tool_bash_run(f"git push {remote} {branch} 2>&1"))
+    return _ok(output="\n".join(out_lines), branch=branch, remote=remote)
+
+
+@app.route("/api/deploy/netlify", methods=["POST"])
+def deploy_netlify() -> Response:
+    """Deploy using Netlify CLI if available."""
+    check = tool_bash_run("which netlify 2>&1 || echo NOT_FOUND")
+    if "NOT_FOUND" in check:
+        return _error(
+            "Netlify CLI not installed. Run: npm i -g netlify-cli",
+            code="NETLIFY_NOT_INSTALLED",
+        )
+    out = tool_bash_run("netlify deploy --prod 2>&1")
+    return _ok(output=out)
+
+
+@app.route("/api/deploy/vercel", methods=["POST"])
+def deploy_vercel() -> Response:
+    """Deploy using Vercel CLI if available."""
+    check = tool_bash_run("which vercel 2>&1 || echo NOT_FOUND")
+    if "NOT_FOUND" in check:
+        return _error(
+            "Vercel CLI not installed. Run: npm i -g vercel",
+            code="VERCEL_NOT_INSTALLED",
+        )
+    out = tool_bash_run("vercel --prod 2>&1")
+    return _ok(output=out)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ROUTES — DOCKER PANEL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _docker_available() -> bool:
+    result = tool_bash_run("docker info --format '{{.ServerVersion}}' 2>&1")
+    return "Cannot connect" not in result and "not found" not in result.lower() and result.strip()
+
+
+@app.route("/api/docker/status")
+def docker_status() -> Response:
+    """Return Docker daemon status and container list."""
+    if not _docker_available():
+        return _ok(
+            available=False,
+            daemon="Docker daemon not running or Docker not installed",
+            containers=[],
+            images=[],
+        )
+    containers = tool_bash_run(
+        'docker ps -a --format "{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}" 2>&1'
+    )
+    images = tool_bash_run(
+        'docker images --format "{{.Repository}}:{{.Tag}}|{{.Size}}|{{.CreatedSince}}" 2>&1'
+    )
+    info = tool_bash_run("docker info --format '{{.ServerVersion}}' 2>&1")
+
+    container_list = []
+    for line in containers.strip().splitlines():
+        parts = line.split("|")
+        if len(parts) >= 3:
+            container_list.append({
+                "name":   parts[0],
+                "image":  parts[1],
+                "status": parts[2],
+                "ports":  parts[3] if len(parts) > 3 else "",
+            })
+
+    image_list = []
+    for line in images.strip().splitlines():
+        parts = line.split("|")
+        if len(parts) >= 2:
+            image_list.append({
+                "name":    parts[0],
+                "size":    parts[1],
+                "created": parts[2] if len(parts) > 2 else "",
+            })
+
+    return _ok(
+        available=True,
+        daemon=f"Docker Engine v{info.strip()}",
+        containers=container_list,
+        images=image_list,
+    )
+
+
+@app.route("/api/docker/build", methods=["POST"])
+def docker_build() -> Response:
+    """Run docker build in the workspace."""
+    data  = request.json or {}
+    tag   = data.get("tag", "nexus-app:latest").strip()
+    ctx   = data.get("context", ".").strip()
+    if not _docker_available():
+        return _error("Docker daemon not available", code="DOCKER_UNAVAILABLE")
+    out = tool_bash_run(f"docker build -t {tag} {ctx} 2>&1")
+    return _ok(output=out, tag=tag)
+
+
+@app.route("/api/docker/compose", methods=["POST"])
+def docker_compose_up() -> Response:
+    """Run docker compose up -d in the workspace."""
+    if not _docker_available():
+        return _error("Docker daemon not available", code="DOCKER_UNAVAILABLE")
+    out = tool_bash_run("docker compose up -d 2>&1 || docker-compose up -d 2>&1")
+    return _ok(output=out)
+
+
+@app.route("/api/docker/stop", methods=["POST"])
+def docker_stop() -> Response:
+    """Stop a specific container by name."""
+    data = request.json or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return _error("'name' is required", code="NO_NAME")
+    out = tool_bash_run(f"docker stop {name} 2>&1")
+    return _ok(output=out, container=name)
+
+
+@app.route("/api/docker/prune", methods=["POST"])
+def docker_prune() -> Response:
+    """Prune stopped containers and dangling images."""
+    if not _docker_available():
+        return _error("Docker daemon not available", code="DOCKER_UNAVAILABLE")
+    out = tool_bash_run("docker system prune -f 2>&1")
+    return _ok(output=out)
+
+
+@app.route("/api/docker/logs", methods=["GET"])
+def docker_logs() -> Response:
+    """Get logs from a container."""
+    name  = request.args.get("name", "").strip()
+    lines = int(request.args.get("lines", 100))
+    if not name:
+        return _error("'name' query parameter is required", code="NO_NAME")
+    out = tool_bash_run(f"docker logs --tail {lines} {name} 2>&1")
+    return _ok(output=out, container=name)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ROUTES — DATABASE EXPLORER
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# In-process database connection state (per-instance, not persisted across restarts)
+_db_connections: dict[str, dict] = {}  # conn_id → {type, path, url}
+_db_lock = threading.Lock()
+
+
+def _make_db_id(db_type: str, target: str) -> str:
+    import hashlib
+    return hashlib.md5(f"{db_type}:{target}".encode()).hexdigest()[:8]
+
+
+def _get_sqlite_conn(path: str):
+    import sqlite3
+    from src.toolbox import enforce_safe_path
+    full = enforce_safe_path(path)
+    return sqlite3.connect(str(full))
+
+
+@app.route("/api/db/connect", methods=["POST"])
+def db_connect() -> Response:
+    """Register a database connection (SQLite path or PostgreSQL URL)."""
+    data    = request.json or {}
+    db_type = data.get("type", "sqlite").lower()
+    target  = data.get("path") or data.get("url", "")
+    if not target:
+        return _error("'path' (SQLite) or 'url' (PostgreSQL) is required", code="NO_TARGET")
+
+    conn_id = _make_db_id(db_type, target)
+
+    if db_type == "sqlite":
+        try:
+            conn = _get_sqlite_conn(target)
+            conn.close()
+        except Exception as exc:
+            return _error(f"Cannot open SQLite database: {exc}", code="DB_OPEN_FAILED")
+        with _db_lock:
+            _db_connections[conn_id] = {"type": "sqlite", "path": target, "name": target}
+        return _ok(conn_id=conn_id, type="sqlite", name=target)
+
+    if db_type in ("postgres", "postgresql", "pg"):
+        try:
+            import psycopg2
+            conn = psycopg2.connect(target)
+            conn.close()
+        except ImportError:
+            return _error("psycopg2 not installed. Run: pip install psycopg2-binary", code="NO_PSYCOPG2")
+        except Exception as exc:
+            return _error(f"Cannot connect to PostgreSQL: {exc}", code="DB_CONNECT_FAILED")
+        with _db_lock:
+            _db_connections[conn_id] = {"type": "pg", "url": target, "name": target[:40]}
+        return _ok(conn_id=conn_id, type="pg", name=target[:40])
+
+    return _error(f"Unsupported database type: {db_type!r}. Use 'sqlite' or 'postgres'.", code="UNKNOWN_TYPE")
+
+
+@app.route("/api/db/connections")
+def db_connections() -> Response:
+    """List active database connections."""
+    with _db_lock:
+        conns = [
+            {"conn_id": cid, "type": c["type"], "name": c.get("name", "")}
+            for cid, c in _db_connections.items()
+        ]
+    return _ok(connections=conns)
+
+
+@app.route("/api/db/tables")
+def db_tables() -> Response:
+    """List all tables in the selected connection."""
+    conn_id = request.args.get("conn_id", "")
+    with _db_lock:
+        conn_meta = _db_connections.get(conn_id)
+
+    if not conn_meta:
+        # Auto-list SQLite files in workspace if no connection chosen
+        from src.toolbox import get_workspace_root
+        root = get_workspace_root()
+        dbs = [str(p.relative_to(root)) for p in root.rglob("*.db")] + \
+              [str(p.relative_to(root)) for p in root.rglob("*.sqlite")]
+        return _ok(tables=[], sqlite_files=dbs, message="No active connection. Connect first or choose a .db file.")
+
+    try:
+        if conn_meta["type"] == "sqlite":
+            import sqlite3
+            from src.toolbox import enforce_safe_path
+            full = enforce_safe_path(conn_meta["path"])
+            conn = sqlite3.connect(str(full))
+            cur  = conn.execute("SELECT name, type FROM sqlite_master WHERE type IN ('table','view') ORDER BY name")
+            tables = [{"name": r[0], "type": r[1]} for r in cur.fetchall()]
+            conn.close()
+            return _ok(tables=tables, conn_id=conn_id)
+
+        if conn_meta["type"] == "pg":
+            import psycopg2
+            conn = psycopg2.connect(conn_meta["url"])
+            cur  = conn.cursor()
+            cur.execute(
+                "SELECT table_name, table_type FROM information_schema.tables "
+                "WHERE table_schema = 'public' ORDER BY table_name"
+            )
+            tables = [{"name": r[0], "type": r[1]} for r in cur.fetchall()]
+            conn.close()
+            return _ok(tables=tables, conn_id=conn_id)
+
+    except Exception as exc:
+        return _error(str(exc), 500, "DB_TABLES_FAILED")
+
+    return _error("Unknown database type", code="UNKNOWN_TYPE")
+
+
+@app.route("/api/db/query", methods=["POST"])
+def db_query() -> Response:
+    """Execute a SQL query and return rows as JSON."""
+    data    = request.json or {}
+    conn_id = data.get("conn_id", "")
+    sql     = (data.get("query") or data.get("sql", "")).strip()
+    if not sql:
+        return _error("'query' is required", code="NO_QUERY")
+
+    # Safety: only allow SELECT / PRAGMA / EXPLAIN in the API (writes go through agent)
+    first_word = sql.split()[0].upper()
+    if first_word not in ("SELECT", "PRAGMA", "EXPLAIN", "WITH", "SHOW", "DESCRIBE", "DESC"):
+        return _error(
+            "Only SELECT / PRAGMA / EXPLAIN queries are allowed via the DB Explorer. "
+            "Use the agent to modify data.",
+            code="WRITE_NOT_ALLOWED",
+        )
+
+    with _db_lock:
+        conn_meta = _db_connections.get(conn_id)
+
+    if not conn_meta:
+        return _error("Connection not found. Connect first via POST /api/db/connect.", code="NOT_CONNECTED")
+
+    try:
+        if conn_meta["type"] == "sqlite":
+            import sqlite3
+            from src.toolbox import enforce_safe_path
+            full = enforce_safe_path(conn_meta["path"])
+            conn = sqlite3.connect(str(full))
+            conn.row_factory = sqlite3.Row
+            cur  = conn.execute(sql)
+            rows = [dict(r) for r in cur.fetchmany(500)]
+            cols = [d[0] for d in cur.description] if cur.description else []
+            conn.close()
+            return _ok(columns=cols, rows=rows, count=len(rows))
+
+        if conn_meta["type"] == "pg":
+            import psycopg2, psycopg2.extras
+            conn = psycopg2.connect(conn_meta["url"])
+            cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute(sql)
+            rows = [dict(r) for r in cur.fetchmany(500)]
+            cols = [d.name for d in cur.description] if cur.description else []
+            conn.close()
+            return _ok(columns=cols, rows=rows, count=len(rows))
+
+    except Exception as exc:
+        return _error(str(exc), 500, "QUERY_FAILED")
+
+    return _error("Unknown database type", code="UNKNOWN_TYPE")
+
+
+@app.route("/api/db/schema")
+def db_schema() -> Response:
+    """Return the schema (CREATE statement) for a specific table."""
+    conn_id = request.args.get("conn_id", "")
+    table   = request.args.get("table", "").strip()
+    if not table:
+        return _error("'table' query parameter is required", code="NO_TABLE")
+
+    with _db_lock:
+        conn_meta = _db_connections.get(conn_id)
+    if not conn_meta:
+        return _error("Connection not found.", code="NOT_CONNECTED")
+
+    try:
+        if conn_meta["type"] == "sqlite":
+            import sqlite3
+            from src.toolbox import enforce_safe_path
+            full = enforce_safe_path(conn_meta["path"])
+            conn = sqlite3.connect(str(full))
+            cur  = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE name = ? AND type IN ('table','view')",
+                (table,)
+            )
+            row = cur.fetchone()
+            conn.close()
+            if not row:
+                return _error(f"Table '{table}' not found", 404, "NOT_FOUND")
+            return _ok(schema=row[0], table=table)
+
+        if conn_meta["type"] == "pg":
+            import psycopg2
+            conn = psycopg2.connect(conn_meta["url"])
+            cur  = conn.cursor()
+            cur.execute(
+                "SELECT column_name, data_type, character_maximum_length, is_nullable "
+                "FROM information_schema.columns WHERE table_name=%s ORDER BY ordinal_position",
+                (table,)
+            )
+            cols = [{"column": r[0], "type": r[1], "max_len": r[2], "nullable": r[3]} for r in cur.fetchall()]
+            conn.close()
+            return _ok(columns=cols, table=table)
+
+    except Exception as exc:
+        return _error(str(exc), 500, "SCHEMA_FAILED")
+
+    return _error("Unknown database type", code="UNKNOWN_TYPE")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -53,6 +53,9 @@ from .llm import get_nvidia_key
 # ──────────────────────────────────────────────────────────────────────────────
 # TRY to import internal tooling (only present when inside the Claw workspace)
 # ──────────────────────────────────────────────────────────────────────────────
+import logging as _logging
+_ma_log = _logging.getLogger("claw.multi_agent")
+
 try:
     from .toolbox import (
         tool_bash_run,
@@ -79,14 +82,24 @@ try:
         RESULT_TRIM_CHARS,
     )
     _INTERNAL_TOOLS_AVAILABLE = True
-except ImportError:
+except ImportError as _import_err:
+    # Log the real error so it shows up in server logs — silent failures waste hours
+    _ma_log.warning(
+        "Internal tools not available (ImportError: %s). "
+        "Swarm agents will run WITHOUT file-system tools. "
+        "Ensure src/toolbox.py and src/agent.py are present.",
+        _import_err,
+    )
     _INTERNAL_TOOLS_AVAILABLE = False
     SYSTEM_PROMPT = "You are a helpful coding assistant."
     MAX_AGENT_TURNS = 15
     RESULT_TRIM_CHARS = 4000
 
     def _execute_tool(name, payload):
-        return f"[Tool {name} not available in standalone mode]"
+        return (
+            f"[ERROR] Tool '{name}' unavailable — toolbox import failed. "
+            "Check server logs for the ImportError details."
+        )
 
     def _parse_all_tool_calls(text):
         return []

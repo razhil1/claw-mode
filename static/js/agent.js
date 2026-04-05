@@ -339,6 +339,30 @@ function handleStreamEvent(evt, contentDiv) {
     if (evt.type === 'stopped') {
         appendSystemMessage('⏹️ ' + (evt.message || 'Agent stopped'));
     }
+
+    if (evt.type === 'mode') {
+        // Show mode badge in the step bar
+        const bar = document.getElementById('agentStepBar');
+        if (bar) {
+            let tag = document.getElementById('agentModeTag');
+            if (!tag) {
+                tag = document.createElement('span');
+                tag.id = 'agentModeTag';
+                tag.style.cssText = 'margin-left:8px;padding:2px 8px;border-radius:12px;font-size:0.75rem;font-weight:600;background:rgba(88,166,255,0.12);color:#58a6ff;border:1px solid rgba(88,166,255,0.25);';
+                bar.appendChild(tag);
+            }
+            tag.textContent = `${evt.emoji || ''} ${evt.label || evt.mode}`;
+            tag.style.display = 'inline-block';
+        }
+        // Also show in chat
+        const modeHint = evt.hint ? ` — ${evt.hint}` : '';
+        const modeBadge = document.createElement('div');
+        modeBadge.className = 'agent-tool-badge';
+        modeBadge.style.cssText = 'opacity:0.7;font-size:12px;';
+        modeBadge.innerHTML = `<i class="fa-solid fa-tag"></i> Mode: <strong>${evt.emoji || ''} ${evt.label || evt.mode}</strong>${escapeHtml(modeHint)}`;
+        contentDiv.appendChild(modeBadge);
+        scrollChat();
+    }
 }
 
 // ─── Message Rendering ──────────────────────────────────────────────────────

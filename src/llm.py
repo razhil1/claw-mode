@@ -4,17 +4,93 @@ import threading
 from typing import List, Dict
 from openai import OpenAI
 
+# ===================== TIKTOKEN (ACCURATE TOKEN COUNTING) =====================
+try:
+    import tiktoken
+    _TIKTOKEN_ENC = tiktoken.get_encoding("cl100k_base")
+    _TIKTOKEN_AVAILABLE = True
+except Exception:
+    _TIKTOKEN_ENC = None
+    _TIKTOKEN_AVAILABLE = False
+
+
+def count_tokens(text: str) -> int:
+    """Accurate token counter using tiktoken; falls back to heuristic."""
+    if _TIKTOKEN_AVAILABLE and _TIKTOKEN_ENC is not None:
+        try:
+            return max(1, len(_TIKTOKEN_ENC.encode(text, disallowed_special=())))
+        except Exception:
+            pass
+    # Fallback: ~4 chars per token (more accurate than /2 for code)
+    return max(1, len(text) // 4)
+
+
 # ===================== RUNTIME KEY STORE =====================
 _runtime_keys: dict[str, str] = {}
 _runtime_keys_lock = threading.Lock()
 
+# Path for persistent key storage (outside workspace sandbox)
+_KEY_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".claw_key")
+
+
+def _load_persisted_key() -> str:
+    """Load NVIDIA API key from persistent file on disk."""
+    try:
+        if os.path.exists(_KEY_FILE):
+            with open(_KEY_FILE, "r") as f:
+                key = f.read().strip()
+            if key:
+                return key
+    except Exception:
+        pass
+    return ""
+
+
+def _persist_key(key: str) -> None:
+    """Save NVIDIA API key to disk for persistence across restarts."""
+    try:
+        with open(_KEY_FILE, "w") as f:
+            f.write(key.strip())
+        os.chmod(_KEY_FILE, 0o600)  # owner-only read/write
+    except Exception:
+        pass
+
+
 def set_runtime_key(key: str):
     with _runtime_keys_lock:
         _runtime_keys["nvidia"] = key
+    # Also persist to disk so it survives restarts
+    _persist_key(key)
+    # And put it in os.environ for this process
+    os.environ["NVIDIA_API_KEY"] = key
+
 
 def get_nvidia_key() -> str:
     with _runtime_keys_lock:
-        return _runtime_keys.get("nvidia") or os.environ.get("NVIDIA_API_KEY", "")
+        runtime_key = _runtime_keys.get("nvidia", "")
+    if runtime_key:
+        return runtime_key
+    # Check environment variable
+    env_key = os.environ.get("NVIDIA_API_KEY", "")
+    if env_key:
+        return env_key
+    # Finally try persistent file
+    persisted = _load_persisted_key()
+    if persisted:
+        # Warm the runtime cache and env
+        with _runtime_keys_lock:
+            _runtime_keys["nvidia"] = persisted
+        os.environ["NVIDIA_API_KEY"] = persisted
+        return persisted
+    return ""
+
+
+# Load persisted key at import time so it's available immediately
+_boot_key = _load_persisted_key()
+if _boot_key and not os.environ.get("NVIDIA_API_KEY"):
+    os.environ["NVIDIA_API_KEY"] = _boot_key
+    with _runtime_keys_lock:
+        _runtime_keys["nvidia"] = _boot_key
 
 
 # ===================== NVIDIA MODEL CATALOG =====================
@@ -164,11 +240,10 @@ class LLMClient:
         self.model = model or os.environ.get("CLAW_MODEL", DEFAULT_MODEL)
 
     def is_smart(self) -> bool:
-        return False  # no smart routing needed — all models are on same provider
+        return False
 
     def _count_tokens(self, text: str) -> int:
-        # Estimate ~2 chars per token for code/mixed text to be safe
-        return max(1, len(text) // 2)
+        return count_tokens(text)
 
     def _get_safe_max_tokens(self, messages: list, ctx_limit: int, desired: int = 4096) -> int:
         total_input = sum(self._count_tokens(m.get("content", "")) for m in messages)
@@ -176,7 +251,7 @@ class LLMClient:
         return min(desired, max(512, remaining))
 
     def _trim_messages(self, messages: list, ctx_limit: int, completion_budget: int = 4096) -> list:
-        max_input = ctx_limit - completion_budget - 500  # 500-token safety buffer
+        max_input = ctx_limit - completion_budget - 500
         system_msgs = [m for m in messages if m.get("role") == "system"]
         other_msgs  = [m for m in messages if m.get("role") != "system"]
 
@@ -190,11 +265,12 @@ class LLMClient:
         total = sum(self._count_tokens(m.get("content", "")) for m in system_msgs + other_msgs)
         if total > max_input and other_msgs:
             m = other_msgs[0]
-            sys_toks = sum(self._count_tokens(m.get("content", "")) for m in system_msgs)
+            sys_toks = sum(self._count_tokens(s.get("content", "")) for s in system_msgs)
             target = max_input - sys_toks
             if target > 100:
                 content = m.get("content", "")
-                char_lim = target * 2
+                # Use accurate char estimate: 1 token ≈ 4 chars for code
+                char_lim = target * 4
                 m["content"] = content[:char_lim] + "... [TRUNCATED]"
         return system_msgs + other_msgs
 
@@ -210,7 +286,6 @@ class LLMClient:
         nvidia_model_id = info.get("nvidia_id", "microsoft/phi-4-mini-instruct")
         ctx_limit = info.get("context", 32768)
 
-        # Enforce context limits
         messages = self._trim_messages(messages, ctx_limit, 4096)
         max_tok = self._get_safe_max_tokens(messages, ctx_limit, 4096)
 
@@ -238,7 +313,6 @@ class LLMClient:
                 if delta.content is not None:
                     result += delta.content
 
-            # Strip DeepSeek-style <think> reasoning blocks
             result = _strip_think_tags(result)
             return result
 
@@ -268,7 +342,6 @@ class LLMClient:
         nvidia_model_id = info.get("nvidia_id", "microsoft/phi-4-mini-instruct")
         ctx_limit = info.get("context", 32768)
 
-        # Enforce context limits
         messages = self._trim_messages(messages, ctx_limit, 4096)
         max_tok = self._get_safe_max_tokens(messages, ctx_limit, 4096)
 
@@ -309,7 +382,6 @@ class LLMClient:
     def get_active_model_info(self) -> dict:
         return NVIDIA_MODELS.get(self.model, {})
 
-    # Keep these for compatibility with agent.py smart routing checks
     def route(self, turn_type: str) -> str:
         return self.model
 
@@ -342,7 +414,6 @@ OpenRouterClient = LLMClient
 SMART_MODELS = {}
 
 def set_runtime_key_compat(provider: str, key: str):
-    """Backwards-compatible key setter — provider arg is ignored (always nvidia)."""
     set_runtime_key(key)
 
 def refresh_all_models():

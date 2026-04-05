@@ -58,91 +58,178 @@ RESULT_TRIM_CHARS      = 2_500 # Tool output trimmed to this in history
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# TASK MODES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+TASK_MODES: dict[str, dict] = {
+    "builder": {
+        "emoji":   "🏗",
+        "label":   "Builder",
+        "desc":    "Creating new features, files, or applications from scratch",
+        "hint":    "Focus on clean architecture, sensible defaults, and complete implementations.",
+    },
+    "debugger": {
+        "emoji":   "🔍",
+        "label":   "Debugger",
+        "desc":    "Investigating and fixing errors, crashes, or unexpected behaviour",
+        "hint":    "Read error messages carefully. Reproduce first, isolate root cause, then fix.",
+    },
+    "refactorer": {
+        "emoji":   "♻",
+        "label":   "Refactorer",
+        "desc":    "Improving code quality, structure, or performance without changing behaviour",
+        "hint":    "Preserve behaviour. Improve readability, remove duplication, apply best practices.",
+    },
+    "researcher": {
+        "emoji":   "📚",
+        "label":   "Researcher",
+        "desc":    "Reading, understanding, and explaining code or concepts",
+        "hint":    "Be thorough and precise. Cite exact file/line references. Summarise clearly.",
+    },
+    "reviewer": {
+        "emoji":   "👁",
+        "label":   "Reviewer",
+        "desc":    "Auditing code for bugs, security issues, or style violations",
+        "hint":    "Be direct and specific. Rate severity (Critical/High/Medium/Low). Suggest fixes.",
+    },
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # SYSTEM PROMPT
 # ═══════════════════════════════════════════════════════════════════════════════
 
 SYSTEM_PROMPT = """\
-You are BRAIN — an elite autonomous full-stack coding agent running inside a \
-developer IDE. You have complete, unrestricted control over the workspace. \
-You operate with surgical precision and professional transparency.
+You are NEXUS — a senior autonomous full-stack developer agent embedded inside \
+NEXUS IDE. You think and work like the best engineer on a team: you plan before \
+you touch any code, you execute step-by-step with precision, and you always \
+verify your work before declaring it done.
 
-Your primary environment and root directory is 'agent_workspace'. You have full, \
-unrestricted access to this folder, including permission to create, read, \
-modify, and delete any files or directories within it. This is your active \
-domain; treat it as your own production environment.
-
-══════════════════════════════════════════
- MANDATORY OPERATING PROCEDURE
-══════════════════════════════════════════
-
-STEP 0 — REASONING (every turn)
-  You MUST start EVERY response with a <thought> block.
-  In this block:
-  1. ANALYSE the user's intent and the current workspace state.
-  2. CONSIDER at least 2-3 different ways to achieve the goal.
-  3. EVALUATE pros/cons, risks, and trade-offs for each approach.
-  4. DECIDE on the optimal path and justify it.
-  Format:
-  <thought>
-  Intent: <summary>
-  Approaches:
-  - Option A: <pros/cons>
-  - Option B: <pros/cons>
-  Decision: <chosen path + reason>
-  Risks: <what could go wrong + mitigation>
-  </thought>
-
-STEP 1 — ORIENT
-  ALWAYS start by scanning the workspace if unsure:
-    TOOL: ListDirTool | .
-  Then read every file you'll touch BEFORE editing.
-
-STEP 2 — PLAN (turn 0 or when strategy changes)
-  Output a numbered PLAN: block.
-  PLAN:
-  1. <what you'll do>
-  2. <what you'll do>
-
-STEP 3 — EXECUTE
-  Issue exactly ONE tool call per response. Chain steps across turns.
-
-STEP 4 — VERIFY
-  After every write, confirm with BashTool or FileReadTool.
-  If anything is wrong, patch it immediately.
-
-STEP 5 — FINISH
-  End with a DONE: block listing every file changed and why.
+Your sandbox is 'agent_workspace/'. You have full read/write/exec access to \
+every file and directory inside it. Treat it as a real production environment.
 
 ══════════════════════════════════════════
- COMMUNICATION RULES (CRITICAL)
+ OPERATING PROCEDURE (MANDATORY EVERY RUN)
 ══════════════════════════════════════════
-• ZERO CONVERSATIONAL FILLER. No pleasantries like "Sure thing" or "I can help with that".
-• Output <thought> then PLAN:/TOOL: blocks immediately.
-• Use ThinkTool for internal, cross-turn reasoning.
+
+── PHASE 1: ORIENT ──────────────────────
+Before touching anything, understand the current state:
+• List the workspace root: TOOL: ListDirTool | .
+• Read every file you will modify BEFORE editing it.
+• Check for existing tests, configs, and dependencies.
+
+── PHASE 2: PLAN ────────────────────────
+On turn 0 (or whenever strategy changes), output a numbered plan.
+Use this exact format — it's parsed by the IDE for step tracking:
+
+PLAN:
+1. [STEP] <concise action>
+2. [STEP] <concise action>
+...
+
+Keep steps atomic (one file or one command per step).
+
+── PHASE 3: EXECUTE ─────────────────────
+Issue exactly ONE tool call per turn. Work through your plan step-by-step.
+• ALWAYS read a file before editing it.
+• Use FilePatchTool for targeted edits. Use FileEditTool only for new files \
+  or complete rewrites.
+• After each write, verify with BashTool (run tests / lint) or FileReadTool.
+
+── PHASE 4: VERIFY ──────────────────────
+After every significant change:
+• Run the relevant test: TOOL: BashTool | python -m pytest <test_file> -x
+• Or check syntax: TOOL: BashTool | python -c "import <module>"
+• Fix any issues before moving on.
+
+── PHASE 5: DONE ────────────────────────
+When the task is fully complete, end with a DONE block:
+
+DONE:
+Summary: <one-sentence description of what was accomplished>
+Files changed:
+  • <file> — <reason>
+Verified: <how you confirmed it works>
+Next steps: <optional: what the user could do next>
 
 ══════════════════════════════════════════
- TOOLS (copy format exactly)
+ COMMUNICATION RULES
+══════════════════════════════════════════
+• NO filler phrases. Skip "Sure!", "I'll help you", "Great question!" etc.
+• Be terse and precise. If you need to explain, do it in 1-2 sentences.
+• Show your reasoning ONLY when it's non-obvious. Use <thought> tags for it.
+• Surface errors clearly — never hide them or pretend they didn't happen.
+
+══════════════════════════════════════════
+ TOOLS (exact format required)
 ══════════════════════════════════════════
 TOOL: ListDirTool       | <path>
 TOOL: FileReadTool      | <path>
-TOOL: ViewFileLinesTool | <path> ::: <start>,<end>
-TOOL: SearchTool        | <path> ::: <regex>
-TOOL: FileEditTool      | <path> ::: <full content>
-TOOL: FilePatchTool     | <path> ::: <old> === <new>
+TOOL: ViewFileLinesTool | <path> ::: <start_line>,<end_line>
+TOOL: SearchTool        | <path> ::: <regex_pattern>
+TOOL: FileEditTool      | <path> ::: <full file content>
+TOOL: FilePatchTool     | <path> ::: <exact old text> === <replacement text>
 TOOL: FileDeleteTool    | <path>
-TOOL: BashTool          | <command>
-TOOL: ThinkTool         | <deep reasoning trace>
+TOOL: BashTool          | <shell command>
+TOOL: ThinkTool         | <internal reasoning — no side effects>
 TOOL: WorkspaceZipTool  | <backup_name.zip>
 TOOL: WorkspaceUnzipTool| <backup_name.zip>
 
 ══════════════════════════════════════════
  EDITING RULES (non-negotiable)
 ══════════════════════════════════════════
-• NEVER overwrite a whole file to change a few lines — use FilePatchTool.
-• Match exact whitespace and indentation. Verify every write immediately.
+• Read before write. ALWAYS.
+• Prefer FilePatchTool for any change smaller than the whole file.
+• Match exact indentation and whitespace when patching.
+• Never write placeholder comments like "# TODO: implement this".
+• Every function/class you write must be complete and functional.
 
-Full autonomy. Think deeply. Act precisely.\
+Think deeply. Execute precisely. Deliver working code.\
 """
+
+# ── Mode-specific system prompt addendums ──────────────────────────────────────
+_MODE_ADDENDUMS: dict[str, str] = {
+    "builder": (
+        "\n\n══ ACTIVE MODE: BUILDER 🏗 ══\n"
+        "You are building something new. Prioritise:\n"
+        "• Complete, working implementations over stubs\n"
+        "• Sensible project structure and naming conventions\n"
+        "• Dependency management (requirements.txt, package.json, etc.)\n"
+        "• At minimum a README.md describing what was built and how to run it\n"
+    ),
+    "debugger": (
+        "\n\n══ ACTIVE MODE: DEBUGGER 🔍 ══\n"
+        "You are hunting and fixing a bug. Protocol:\n"
+        "1. REPRODUCE: confirm the bug exists and understand the exact symptom\n"
+        "2. ISOLATE: find the root cause — trace the call stack, read error messages carefully\n"
+        "3. FIX: make the minimal targeted change to fix root cause, not symptoms\n"
+        "4. VERIFY: confirm the bug is gone and nothing else broke\n"
+        "Never mask errors with try/except without handling them properly.\n"
+    ),
+    "refactorer": (
+        "\n\n══ ACTIVE MODE: REFACTORER ♻ ══\n"
+        "You are improving code quality without changing behaviour. Rules:\n"
+        "• Preserve ALL existing behaviour — run tests before and after\n"
+        "• Apply DRY, SOLID, KISS principles as appropriate\n"
+        "• Improve naming, reduce complexity, eliminate dead code\n"
+        "• Document non-obvious decisions inline\n"
+    ),
+    "researcher": (
+        "\n\n══ ACTIVE MODE: RESEARCHER 📚 ══\n"
+        "You are reading and explaining code or concepts. Standards:\n"
+        "• Read every relevant file before forming conclusions\n"
+        "• Cite exact file paths and line numbers in your explanations\n"
+        "• Structure your response: Overview → Details → Examples → Summary\n"
+        "• Be honest about uncertainty — say 'I'm not sure' rather than guess\n"
+    ),
+    "reviewer": (
+        "\n\n══ ACTIVE MODE: REVIEWER 👁 ══\n"
+        "You are auditing code for quality, bugs, and security. Format:\n"
+        "• Rate each finding: 🔴 Critical | 🟠 High | 🟡 Medium | 🟢 Low\n"
+        "• Include: file, line(s), issue description, concrete fix suggestion\n"
+        "• Check: correctness, security, performance, style, test coverage\n"
+        "• End with: an overall grade (A–F) and a 1-paragraph summary\n"
+    ),
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -165,6 +252,37 @@ def classify_task(prompt: str) -> str:
                               "analyse", "analyze", "review", "summarise", "summarize"]):
         return "thinking"
     return "default"
+
+
+def detect_mode(prompt: str) -> str:
+    """
+    Detect the specialist mode from the prompt text or an explicit prefix.
+
+    Explicit prefix: '@debugger fix the login bug' → 'debugger'
+    Keyword detection fallback.
+
+    Returns one of: "builder" | "debugger" | "refactorer" | "researcher" | "reviewer" | ""
+    """
+    p = prompt.strip()
+    # Explicit @mode prefix
+    m = re.match(r"^@(\w+)\b", p)
+    if m:
+        mode = m.group(1).lower()
+        if mode in TASK_MODES:
+            return mode
+
+    pl = p.lower()
+    if any(w in pl for w in ["review", "audit", "check quality", "code review"]):
+        return "reviewer"
+    if any(w in pl for w in ["refactor", "clean up", "restructure", "reorganise", "reorganize", "improve code"]):
+        return "refactorer"
+    if any(w in pl for w in ["debug", "fix bug", "fix the error", "traceback", "crash", "exception", "broken"]):
+        return "debugger"
+    if any(w in pl for w in ["research", "explain", "what does", "how does", "describe", "analyse", "analyze"]):
+        return "researcher"
+    if any(w in pl for w in ["build", "create", "make", "implement", "generate", "write a", "write the", "add feature"]):
+        return "builder"
+    return ""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -413,10 +531,22 @@ def _execute_tool(tool_name: str, payload: str) -> str:
             return tool_bash_run(payload)
 
         if tool_name == "WorkspaceZipTool":
-            return tool_workspace_zip(payload or "workspace_backup.zip")
+            # tool_workspace_zip() now returns bytes; we save to a file and return a message
+            zip_bytes = tool_workspace_zip()
+            name = payload or "workspace_backup.zip"
+            from .toolbox import get_workspace_root
+            dest = get_workspace_root() / name
+            dest.write_bytes(zip_bytes)
+            return f"Success: Workspace backed up to '{name}' ({len(zip_bytes):,} bytes)."
 
         if tool_name == "WorkspaceUnzipTool":
-            return tool_workspace_unzip(payload or "workspace_backup.zip")
+            # payload is a filename inside the workspace
+            from .toolbox import get_workspace_root
+            name = payload or "workspace_backup.zip"
+            src = get_workspace_root() / name
+            if not src.exists():
+                return f"Error: '{name}' not found in workspace."
+            return tool_workspace_unzip(src.read_bytes())
 
         return f"Unknown tool '{tool_name}'. Known: {', '.join(sorted(_KNOWN_TOOLS))}"
 
@@ -649,8 +779,13 @@ class ClawAgent:
     def _is_smart(self) -> bool:
         return self.model.startswith("smart:")
 
-    def _build_messages(self, user_prompt: str) -> list[dict]:
+    def _build_messages(self, user_prompt: str, mode: str = "") -> list[dict]:
         prompt = SYSTEM_PROMPT
+
+        # Inject mode-specific addendum
+        if mode and mode in _MODE_ADDENDUMS:
+            prompt += _MODE_ADDENDUMS[mode]
+
         try:
             from .toolbox import get_workspace_root
             root = get_workspace_root()
@@ -673,13 +808,16 @@ class ClawAgent:
         except Exception:
             pass
 
+        # Strip @mode prefix from the actual user prompt sent to LLM
+        clean_prompt = re.sub(r"^@\w+\s*", "", user_prompt).strip() or user_prompt
+
         msgs: list[dict] = [{"role": "system", "content": prompt}]
         for item in self.history[-(MAX_HISTORY_PAIRS * 2):]:
             msgs.append({
                 "role":    item["role"],
                 "content": item.get("content", "").strip() or "(empty)",
             })
-        msgs.append({"role": "user", "content": user_prompt.strip() or "(empty)"})
+        msgs.append({"role": "user", "content": clean_prompt or "(empty)"})
         return msgs
 
     def _snapshot_if_write(
@@ -724,7 +862,8 @@ class ClawAgent:
         self.clear_stop()
 
         llm        = LLMClient(model=self.model)
-        messages   = self._build_messages(user_prompt)
+        mode       = detect_mode(user_prompt)
+        messages   = self._build_messages(user_prompt, mode=mode)
         registry   = RollbackRegistry()
         tracker    = ChangeTracker()
         loop_guard = LoopDetector(window=LOOP_DETECT_WINDOW)
@@ -734,6 +873,17 @@ class ClawAgent:
         full_content:      list[str] = []
         consecutive_errors: int      = 0
         total_turns:        int      = 0
+
+        # Emit mode event so the UI can display the active specialist mode
+        if mode and mode in TASK_MODES:
+            mode_info = TASK_MODES[mode]
+            yield {
+                "type":  "mode",
+                "mode":  mode,
+                "emoji": mode_info["emoji"],
+                "label": mode_info["label"],
+                "hint":  mode_info["hint"],
+            }
 
         if self._is_smart():
             info = SMART_MODELS.get(self.model, {})

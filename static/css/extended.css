@@ -500,3 +500,127 @@
 }
 .thought-content li { margin-bottom: 0.2rem; }
 
+/* ── AGENT PLAN BLOCK ── */
+.agent-plan-block {
+    background: var(--bg-elevated, #161b22);
+    border: 1px solid var(--border, #30363d);
+    border-left: 3px solid var(--cyan, #58a6ff);
+    border-radius: var(--r-md, 8px);
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    font-size: 13px;
+}
+.plan-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--cyan, #58a6ff);
+    margin-bottom: 8px;
+}
+.plan-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    color: var(--text-sub, #8b949e);
+    transition: color 0.2s;
+}
+.plan-step.active {
+    color: var(--text, #e6edf3);
+    font-weight: 500;
+}
+.plan-step.done {
+    color: var(--text-muted, #6e7681);
+    text-decoration: line-through;
+}
+.plan-step-num {
+    min-width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--bg-active, #21262d);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted, #6e7681);
+}
+.plan-step.active .plan-step-num {
+    background: var(--cyan, #58a6ff);
+    color: #000;
+}
+.plan-step.done .plan-step-num {
+    background: var(--green, #3fb950);
+    color: #000;
+}
+.plan-step-text { flex: 1; }
+.plan-step-status { font-size: 8px; color: transparent; }
+.plan-step.active .plan-step-status { color: var(--amber, #d29922); }
+.plan-step.done .plan-step-status { color: var(--green, #3fb950); }
+
+/* ── DOCKER PANEL ── */
+.docker-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-light, #21262d);
+    font-size: 12px;
+}
+.docker-item:last-child { border-bottom: none; }
+.docker-item-info { flex: 1; min-width: 0; }
+.docker-item-name { display: block; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docker-item-meta { display: block; font-size: 10px; color: var(--text-muted); }
+.docker-item-ports { display: block; font-size: 10px; color: var(--cyan); }
+.docker-stop-btn { background: none; border: 1px solid var(--red, #f85149); color: var(--red, #f85149); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 10px; }
+.docker-stop-btn:hover { background: rgba(248,81,73,0.1); }
+
+/* ── DATABASE PANEL ── */
+.db-conn-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-light, #21262d);
+    font-size: 12px;
+    transition: background 0.15s;
+}
+.db-conn-item:hover { background: var(--bg-elevated); }
+.db-conn-item.active { background: var(--bg-active); border-left: 2px solid var(--cyan); }
+.db-conn-info { flex: 1; min-width: 0; }
+.db-conn-name { display: block; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.db-conn-type { display: block; font-size: 10px; color: var(--text-muted); text-transform: uppercase; }
+.db-table-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    border-bottom: 1px solid var(--border-light, #21262d);
+    transition: background 0.15s;
+}
+.db-table-item:hover { background: var(--bg-elevated); color: var(--cyan); }
+.db-table-type { margin-left: auto; font-size: 10px; color: var(--text-muted); }
+.db-tables-list { padding: 4px 0; }
+.db-result-label { padding: 4px 12px; font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+.db-result-meta { padding: 6px 12px; font-size: 11px; color: var(--text-muted); }
+.db-table-wrap { overflow-x: auto; max-height: 400px; overflow-y: auto; }
+.db-result-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.db-result-table th { padding: 6px 10px; text-align: left; background: var(--bg-elevated); color: var(--text-sub); font-weight: 600; border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+.db-result-table td { padding: 5px 10px; border-bottom: 1px solid var(--border-light, #21262d); color: var(--text); }
+.db-result-table tr:hover td { background: var(--bg-elevated); }
+.db-result-error { padding: 10px 12px; color: var(--red, #f85149); font-size: 12px; }
+.db-file-link { display: inline-block; margin: 4px 0; padding: 2px 8px; background: var(--bg-elevated); border-radius: 4px; cursor: pointer; color: var(--cyan); font-size: 11px; }
+.db-file-link:hover { text-decoration: underline; }
+
+/* ── UTILITY ── */
+.text-green { color: var(--green, #3fb950); }
+.text-red { color: var(--red, #f85149); }
+.text-amber { color: var(--amber, #d29922); }
+

@@ -109,6 +109,7 @@ async function sendPrompt() {
     
     appendMessage(text, 'user');
     setAgentWorking(true);
+    _clearModeTag();
 
     try {
         const res = await fetch('/api/chat/stream', {
@@ -118,6 +119,9 @@ async function sendPrompt() {
         });
         
         const contentDiv = appendMessage('', 'agent');
+        let planEl = null;
+        let planSteps = [];
+        let stepsDone = 0;
         
         const reader = res.body.getReader();
         const dec = new TextDecoder();
@@ -136,18 +140,166 @@ async function sendPrompt() {
                 if (raw === '[DONE]') break;
                 try {
                     const evt = JSON.parse(raw);
-                    if (evt.type === 'token' && evt.text) {
-                        contentDiv.innerHTML = marked.parse(contentDiv.dataset.md = (contentDiv.dataset.md || '') + evt.text);
-                        document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+
+                    // ── Mode badge ────────────────────────────────────────────
+                    if (evt.type === 'mode') {
+                        _showModeTag(evt.emoji, evt.label);
                     }
+
+                    // ── Thinking indicator ────────────────────────────────────
+                    if (evt.type === 'thinking') {
+                        _setThinkingStep(evt.text);
+                    }
+
+                    // ── Plan rendering ────────────────────────────────────────
+                    if (evt.type === 'plan') {
+                        planEl = _renderPlan(evt.text, contentDiv);
+                        // Extract numbered steps for tracking
+                        planSteps = (evt.text.match(/^\s*\d+\.\s+.+/gm) || []).map(s => s.replace(/^\s*\d+\.\s+/, '').trim());
+                        stepsDone = 0;
+                    }
+
+                    // ── Prose tokens ──────────────────────────────────────────
+                    if (evt.type === 'token' && evt.text) {
+                        // Strip PLAN: and DONE: blocks from the streamed text
+                        let clean = evt.text
+                            .replace(/PLAN:\s*[\s\S]*?(?=\n\n|\n(?=\S)|$)/g, '')
+                            .replace(/DONE:\s*[\s\S]*/g, '')
+                            .trim();
+                        if (clean) {
+                            contentDiv.dataset.md = (contentDiv.dataset.md || '') + clean + '\n';
+                            try {
+                                contentDiv.innerHTML = marked.parse(contentDiv.dataset.md);
+                            } catch(e) {
+                                contentDiv.textContent = contentDiv.dataset.md;
+                            }
+                            document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+                        }
+                    }
+
+                    // ── Tool call ─────────────────────────────────────────────
+                    if (evt.type === 'tool_call') {
+                        _setThinkingStep(`${evt.tool}: ${(evt.payload || '').slice(0, 60)}`);
+                        // Advance plan step indicator
+                        if (planEl && stepsDone < planSteps.length) {
+                            _markPlanStep(planEl, stepsDone);
+                            stepsDone++;
+                        }
+                    }
+
+                    // ── Tool result → tool log ────────────────────────────────
+                    if (evt.type === 'tool_result') {
+                        logToolCall({
+                            tool:    evt.tool,
+                            type:    evt.success ? 'tool_call' : 'error',
+                            summary: `${evt.tool} (${evt.elapsed}s)`,
+                            result:  evt.result || '',
+                        });
+                    }
+
+                    // ── Loop warning ──────────────────────────────────────────
+                    if (evt.type === 'loop_warn') {
+                        showToast('Agent detected a loop — redirecting…', 'warning');
+                    }
+
+                    // ── Done summary ──────────────────────────────────────────
+                    if (evt.type === 'done') {
+                        _renderDoneSummary(evt, contentDiv);
+                        if (planEl) _markAllPlanDone(planEl);
+                    }
+
+                    // ── Key error ─────────────────────────────────────────────
+                    if (evt.type === 'key_error') {
+                        contentDiv.dataset.md = (contentDiv.dataset.md || '') + `\n\n⚠️ **${evt.message}**\n`;
+                        contentDiv.innerHTML = marked.parse(contentDiv.dataset.md);
+                        showToast(evt.message, 'error');
+                    }
+
+                    // ── Stop / error ──────────────────────────────────────────
+                    if (evt.type === 'stopped') {
+                        showToast('Agent stopped', 'warning');
+                    }
+                    if (evt.type === 'error') {
+                        showToast(evt.message || 'Agent error', 'error');
+                    }
+
                 } catch(e) {}
             }
         }
         await loadFiles();
-    } catch {
-        showToast('Communication error', 'error');
+    } catch(err) {
+        showToast('Communication error: ' + err.message, 'error');
     }
     setAgentWorking(false);
+    _setThinkingStep('');
+}
+
+// ── Agent UI helpers ──────────────────────────────────────────────────────────
+
+function _showModeTag(emoji, label) {
+    const bar = document.getElementById('agentStepBar');
+    if (!bar) return;
+    let tag = document.getElementById('agentModeTag');
+    if (!tag) {
+        tag = document.createElement('span');
+        tag.id = 'agentModeTag';
+        tag.style.cssText = 'margin-left:8px;padding:2px 8px;border-radius:12px;font-size:0.75rem;background:var(--accent-muted,#1e3a5f);color:var(--accent,#58a6ff);';
+        bar.appendChild(tag);
+    }
+    tag.textContent = `${emoji} ${label}`;
+    tag.style.display = '';
+}
+
+function _clearModeTag() {
+    const tag = document.getElementById('agentModeTag');
+    if (tag) tag.style.display = 'none';
+}
+
+function _setThinkingStep(text) {
+    const el = document.getElementById('agentStatusText');
+    if (el) el.textContent = text ? `${text.slice(0, 60)}…` : 'Agent Ready';
+}
+
+function _renderPlan(planText, contentDiv) {
+    const steps = (planText.match(/^\s*\d+\.\s+.+/gm) || []);
+    if (!steps.length) return null;
+    const ul = document.createElement('div');
+    ul.className = 'agent-plan-block';
+    ul.innerHTML = '<div class="plan-header"><i class="fa-solid fa-list-check"></i> Plan</div>' +
+        steps.map((s, i) => {
+            const txt = s.replace(/^\s*\d+\.\s+/, '');
+            return `<div class="plan-step" id="plan-step-${i}" data-idx="${i}">
+                <span class="plan-step-num">${i+1}</span>
+                <span class="plan-step-text">${escapeHtml(txt)}</span>
+                <i class="fa-solid fa-circle plan-step-status"></i>
+            </div>`;
+        }).join('');
+    // Insert before any existing content in contentDiv
+    const parent = contentDiv.parentNode;
+    parent.insertBefore(ul, contentDiv);
+    return ul;
+}
+
+function _markPlanStep(planEl, idx) {
+    const step = planEl?.querySelector(`#plan-step-${idx}`);
+    if (step) {
+        step.classList.add('active');
+        const prev = planEl.querySelector(`#plan-step-${idx - 1}`);
+        if (prev) { prev.classList.remove('active'); prev.classList.add('done'); }
+    }
+}
+
+function _markAllPlanDone(planEl) {
+    planEl?.querySelectorAll('.plan-step').forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
+}
+
+function _renderDoneSummary(evt, contentDiv) {
+    if (!evt.files_changed || !evt.files_changed.length) return;
+    const summary = `\n\n---\n**Done** — ${evt.turns} turn${evt.turns !== 1 ? 's' : ''} · ${evt.files_changed.length} file${evt.files_changed.length !== 1 ? 's' : ''} changed\n` +
+        evt.files_changed.map(f => `- \`${f}\``).join('\n');
+    contentDiv.dataset.md = (contentDiv.dataset.md || '') + summary;
+    try { contentDiv.innerHTML = marked.parse(contentDiv.dataset.md); } catch(e) {}
+    document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 
 function appendMessage(text, role) {
