@@ -281,31 +281,30 @@ function handleStreamEvent(evt, contentDiv) {
     }
 
     if (evt.type === 'plan_steps' && evt.steps && evt.steps.length > 0) {
-        // Replace plan-content with an interactive step checklist
+        // Always create/replace the plan element with an interactive step checklist
         let planEl = contentDiv.querySelector('.agent-plan');
         if (!planEl) {
             planEl = document.createElement('div');
             planEl.className = 'agent-plan';
-            planEl.innerHTML = `
-                <div class="plan-header" onclick="this.parentElement.classList.toggle('collapsed')">
-                   <i class="fa-solid fa-list-check"></i> Execution Plan
-                   <i class="fa-solid fa-chevron-down toggle-icon"></i>
-                </div>
-                <ol class="plan-step-list"></ol>
-            `;
             contentDiv.appendChild(planEl);
         }
-        const list = planEl.querySelector('.plan-step-list') || planEl.querySelector('.plan-content');
-        if (list && list.tagName === 'OL') {
-            list.innerHTML = '';
-            evt.steps.forEach((step, i) => {
-                const li = document.createElement('li');
-                li.className = 'plan-step pending';
-                li.dataset.stepIndex = i;
-                li.innerHTML = `<span class="step-icon"><i class="fa-regular fa-circle"></i></span><span class="step-label">${escapeHtml(step)}</span>`;
-                list.appendChild(li);
-            });
-        }
+        // Always rewrite inner HTML so we get a real <ol>, even if plan event
+        // already created a <div class="plan-content">
+        planEl.innerHTML = `
+            <div class="plan-header" onclick="this.parentElement.classList.toggle('collapsed')">
+               <i class="fa-solid fa-list-check"></i> Execution Plan
+               <i class="fa-solid fa-chevron-down toggle-icon"></i>
+            </div>
+            <ol class="plan-step-list"></ol>
+        `;
+        const list = planEl.querySelector('.plan-step-list');
+        evt.steps.forEach((step, i) => {
+            const li = document.createElement('li');
+            li.className = 'plan-step pending';
+            li.dataset.stepIndex = i;
+            li.innerHTML = `<span class="step-icon"><i class="fa-regular fa-circle"></i></span><span class="step-label">${escapeHtml(step)}</span>`;
+            list.appendChild(li);
+        });
         planEl.dataset.stepsCount = evt.steps.length;
         scrollChat();
     }
@@ -347,11 +346,15 @@ function handleStreamEvent(evt, contentDiv) {
         const cmdsHtml = (evt.commands_run || []).length > 0
             ? `<div class="ds-section"><div class="ds-section-title"><i class="fa-solid fa-terminal"></i> Commands Run</div><ul class="ds-cmd-list">${(evt.commands_run || []).map(c => `<li><code>${escapeHtml(c.slice(0, 80))}</code></li>`).join('')}</ul></div>`
             : '';
+        const errHtml = (evt.errors_encountered || []).length > 0
+            ? `<div class="ds-section ds-errors"><div class="ds-section-title"><i class="fa-solid fa-triangle-exclamation"></i> Errors Encountered</div><ul class="ds-err-list">${(evt.errors_encountered || []).map(e => `<li><code>${escapeHtml(e.slice(0, 120))}</code></li>`).join('')}</ul></div>`
+            : '';
         const stepsHtml = evt.steps_total > 0
-            ? `<div class="ds-stat"><i class="fa-solid fa-check-double"></i> ${evt.steps_done}/${evt.steps_total} steps completed</div>`
+            ? `<div class="ds-stat"><i class="fa-solid fa-check-double"></i> ${evt.steps_done}/${evt.steps_total} steps</div>`
             : '';
         const turnsHtml = `<div class="ds-stat"><i class="fa-solid fa-rotate"></i> ${evt.turns} turn${evt.turns !== 1 ? 's' : ''}</div>`;
-        const modeHtml = evt.mode ? `<div class="ds-stat"><i class="fa-solid fa-tag"></i> Mode: ${escapeHtml(evt.mode)}</div>` : '';
+        const modeHtml = evt.mode ? `<div class="ds-stat"><i class="fa-solid fa-tag"></i> ${escapeHtml(evt.mode)}</div>` : '';
+        const resultStmt = evt.result_statement ? `<div class="ds-result-stmt">${escapeHtml(evt.result_statement)}</div>` : '';
 
         card.innerHTML = `
             <div class="ds-header" onclick="this.parentElement.classList.toggle('collapsed')">
@@ -360,9 +363,11 @@ function handleStreamEvent(evt, contentDiv) {
                 <i class="fa-solid fa-chevron-down ds-toggle-icon"></i>
             </div>
             <div class="ds-body">
+                ${resultStmt}
                 ${filesHtml}
                 ${cmdsHtml}
-                ${(evt.files_changed || []).length === 0 && (evt.commands_run || []).length === 0 ? '<div class="ds-empty">No files modified.</div>' : ''}
+                ${errHtml}
+                ${(evt.files_changed || []).length === 0 && (evt.commands_run || []).length === 0 && (evt.errors_encountered || []).length === 0 ? '<div class="ds-empty">No files modified.</div>' : ''}
             </div>
         `;
         // Append after the whole message-wrap, not inside it

@@ -800,6 +800,21 @@
 
 .agent-done-summary .ds-file-list code { color: var(--cyan, #79c0ff); font-size: 11px; }
 .agent-done-summary .ds-cmd-list  code { color: var(--text-sub, #8b949e); font-size: 11px; }
+.agent-done-summary .ds-err-list  code { color: var(--orange, #e3b341); font-size: 11px; }
+
+.agent-done-summary .ds-errors .ds-section-title {
+    color: var(--orange, #e3b341);
+}
+
+.agent-done-summary .ds-result-stmt {
+    font-size: 12px;
+    color: var(--text-main, #e6edf3);
+    background: rgba(57, 197, 97, 0.08);
+    border-left: 3px solid var(--green, #39c561);
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
 
 .agent-done-summary .ds-empty {
     font-size: 12px;

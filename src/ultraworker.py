@@ -1364,17 +1364,31 @@ class UltraWorker:
                 "lang":          state.lang,
                 "history_len":   len(self.history) // 2,
             }
+            # Build plain-English result statement
+            if files_changed:
+                _result_stmt = (
+                    f"Task completed in {state.total_turns} turn(s). "
+                    f"Modified {len(files_changed)} file(s): {', '.join(files_changed[:5])}"
+                    + (f" and {len(files_changed) - 5} more" if len(files_changed) > 5 else ".")
+                )
+            else:
+                _result_stmt = f"Task completed in {state.total_turns} turn(s) with no file modifications."
             # Emit structured done_summary for UI summary card
             yield {
-                "type":          "done_summary",
-                "turns":         state.total_turns,
-                "files_changed": files_changed,
-                "file_diffs":    file_diffs,
-                "commands_run":  commands_run,
-                "steps_total":   len(plan_steps),
-                "steps_done":    step_index,
-                "lang":          state.lang,
-                "mode":          "ultra",
+                "type":               "done_summary",
+                "turns":              state.total_turns,
+                "files_changed":      files_changed,
+                "file_diffs":         file_diffs,
+                "commands_run":       commands_run,
+                "steps_total":        len(plan_steps),
+                "steps_done":         step_index,
+                "lang":               state.lang,
+                "mode":               "ultra",
+                "errors_encountered": [
+                    f"{tr.tool}: {tr.output[:150]}"
+                    for tr in []  # UltraWorker stores results inline; no separate list needed
+                ],
+                "result_statement":   _result_stmt,
             }
 
 

@@ -94,6 +94,16 @@ TASK_MODES: dict[str, dict] = {
     },
 }
 
+# Per-mode execution policies: override defaults when a mode is active.
+# Keys: max_turns (int), turn_type (str — passed to LLM router), read_only (bool)
+_MODE_POLICIES: dict[str, dict] = {
+    "builder":    {"max_turns": 40, "turn_type": "coding",    "read_only": False},
+    "debugger":   {"max_turns": 30, "turn_type": "debugging", "read_only": False},
+    "refactorer": {"max_turns": 25, "turn_type": "coding",    "read_only": False},
+    "researcher": {"max_turns": 15, "turn_type": "thinking",  "read_only": True},
+    "reviewer":   {"max_turns": 15, "turn_type": "thinking",  "read_only": True},
+}
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SYSTEM PROMPT
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -876,6 +886,14 @@ class ClawAgent:
         plan_steps:        list[str] = []
         step_index:        int       = 0
         commands_run:      list[str] = []
+        errors_encountered: list[str] = []
+        plan_emitted:      bool      = False
+
+        # Apply mode-specific execution policy
+        policy       = _MODE_POLICIES.get(mode, {})
+        _max_turns   = policy.get("max_turns", MAX_AGENT_TURNS)
+        _mode_tt     = policy.get("turn_type", "")     # override base turn_type if set
+        _read_only   = policy.get("read_only", False)  # block write tools
 
         # Emit mode event so the UI can display the active specialist mode
         if mode and mode in TASK_MODES:
@@ -896,7 +914,7 @@ class ClawAgent:
             }
 
         # ── turn loop ─────────────────────────────────────────────────────────
-        for turn in range(MAX_AGENT_TURNS):
+        for turn in range(_max_turns):
             if self._stop_event.is_set():
                 yield {"type": "stopped", "message": "Agent stopped by user.",
                        "turns": total_turns}
@@ -911,7 +929,9 @@ class ClawAgent:
                 break
 
             total_turns = turn + 1
-            turn_type   = self._resolve_turn_type(turn, messages, task_class)
+            # Mode policy overrides the task-class turn_type when set
+            base_tt   = _mode_tt if _mode_tt else task_class
+            turn_type = self._resolve_turn_type(turn, messages, base_tt)
 
             # Emit per-turn label
             if self._is_smart():
@@ -924,7 +944,7 @@ class ClawAgent:
                 }
             else:
                 yield {"type": "thinking",
-                       "text": f"Turn {turn + 1} / {MAX_AGENT_TURNS}…"}
+                       "text": f"Turn {turn + 1} / {_max_turns}…"}
 
             # ── stream LLM response ───────────────────────────────────────────
             response_text = ""
@@ -962,6 +982,7 @@ class ClawAgent:
             if turn == 0:
                 plan = _extract_plan(response_text)
                 if plan:
+                    plan_emitted = True
                     yield {"type": "plan", "text": plan}
                     # Parse numbered steps from plan text for tracking
                     steps = re.findall(r"^\s*\d+[\.\)]\s+(.+)$", plan, re.MULTILINE)
@@ -969,6 +990,28 @@ class ClawAgent:
                         plan_steps.clear()
                         plan_steps.extend(steps)
                         yield {"type": "plan_steps", "steps": plan_steps}
+                else:
+                    # ── MANDATORY PLANNING GATE ───────────────────────────────
+                    # If the model skipped the PLAN block on turn 0, inject a
+                    # system nudge so the very next turn must produce a plan
+                    # before any tool execution is allowed.
+                    tool_calls_t0 = _parse_all_tool_calls(response_text)
+                    if tool_calls_t0:
+                        # Block execution — demand a plan first
+                        yield {
+                            "type": "thinking",
+                            "text": "Planning phase required — requesting plan before execution…",
+                        }
+                        messages.append({"role": "assistant", "content": response_text.strip() or "(empty)"})
+                        messages.append({
+                            "role":    "user",
+                            "content": (
+                                "[System] You must output a PLAN: block with numbered steps "
+                                "BEFORE issuing any tool calls. Please produce your plan now."
+                            ),
+                        })
+                        full_content.append(response_text)
+                        continue  # re-enter loop asking for plan
 
             # ── emit clean prose ──────────────────────────────────────────────
             clean_prose = _strip_tool_lines(response_text)
@@ -999,6 +1042,22 @@ class ClawAgent:
                 yield {"type": "loop_warn", "text": hint}
                 messages.append({"role": "user", "content": f"[System Warning] {hint}"})
                 consecutive_errors += 1
+                continue
+
+            # Read-only mode: block any write/execute tools
+            _WRITE_TOOLS = {"FileEditTool", "FilePatchTool", "FileDeleteTool",
+                            "BashTool", "WorkspaceZipTool", "WorkspaceUnzipTool"}
+            if _read_only and tool_name in _WRITE_TOOLS:
+                result = (
+                    f"[Read-only mode] Tool '{tool_name}' is not permitted in "
+                    f"{mode} mode. Only read/search tools are allowed."
+                )
+                errors_encountered.append(result)
+                yield {"type": "tool_result", "tool": tool_name, "result": result,
+                       "elapsed": 0.0, "success": False, "attempt": 1}
+                messages.append({"role": "assistant", "content": response_text.strip() or "(empty)"})
+                messages.append({"role": "user", "content": f"[Tool Result — {tool_name}]\n{result}"})
+                full_content.append(response_text)
                 continue
 
             # Pre-snapshot + pre-track
@@ -1096,9 +1155,10 @@ class ClawAgent:
                 if tool_success or attempt >= MAX_RETRIES:
                     step_index += 1
 
-            # Error accounting
+            # Error accounting + error collection
             if _is_error(result):
                 consecutive_errors += 1
+                errors_encountered.append(f"{tool_name}: {result[:150]}")
             else:
                 consecutive_errors = max(0, consecutive_errors - 1)
 
@@ -1144,14 +1204,30 @@ class ClawAgent:
                 "history_len":        len(self.history) // 2,
                 "rollback_available": registry.has_snapshots,
             }
+            # Build a plain-English result statement
+            if files_changed:
+                _result_stmt = (
+                    f"Task completed in {total_turns} turn(s). "
+                    f"Modified {len(files_changed)} file(s): {', '.join(files_changed[:5])}"
+                    + (f" and {len(files_changed) - 5} more" if len(files_changed) > 5 else ".")
+                )
+            elif errors_encountered:
+                _result_stmt = (
+                    f"Task ran {total_turns} turn(s) but encountered "
+                    f"{len(errors_encountered)} error(s). No files were changed."
+                )
+            else:
+                _result_stmt = f"Task completed in {total_turns} turn(s) with no file modifications."
             # Emit a structured done_summary event for the UI summary card
             yield {
-                "type":          "done_summary",
-                "turns":         total_turns,
-                "files_changed": files_changed,
-                "file_diffs":    file_diffs,
-                "commands_run":  commands_run,
-                "steps_total":   len(plan_steps),
-                "steps_done":    step_index,
-                "mode":          mode,
+                "type":               "done_summary",
+                "turns":              total_turns,
+                "files_changed":      files_changed,
+                "file_diffs":         file_diffs,
+                "commands_run":       commands_run,
+                "steps_total":        len(plan_steps),
+                "steps_done":         step_index,
+                "mode":               mode,
+                "errors_encountered": errors_encountered,
+                "result_statement":   _result_stmt,
             }
