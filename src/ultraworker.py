@@ -1096,14 +1096,18 @@ class UltraWorker:
         """
         self.clear_stop()
 
-        # Import here to avoid circular; _MODE_POLICIES + VALID_MODES live in agent.py
-        from .agent import _MODE_POLICIES, VALID_MODES
-        # Validate mode_override against canonical allowed keys
-        _mode = mode_override if mode_override in VALID_MODES else ""
+        # Import here to avoid circular; policy tables live in agent.py
+        from .agent import _MODE_POLICIES, VALID_MODES, detect_mode
+        # Validate or auto-detect the specialist mode
+        if mode_override in VALID_MODES:
+            _mode = mode_override
+        else:
+            # Auto-detect from prompt so specialist policies always activate
+            _mode = detect_mode(user_prompt)
         _policy    = _MODE_POLICIES.get(_mode, {})
         _max_turns = _policy.get("max_turns", MAX_TURNS)
         _read_only = _policy.get("read_only", False)
-        # Rebind so local references use the validated value
+        # Rebind so all local references use the validated/detected value
         mode_override = _mode
 
         root     = self._root()
@@ -1162,6 +1166,8 @@ class UltraWorker:
                 llm = LLMClient(model=_pref_model)
             else:
                 llm = self._llm(state.current_phase)
+            # turn_type from mode policy overrides task-class routing when set
+            _mode_tt = _policy.get("turn_type", "") or state.task_class
             messages = ctx.build(user_prompt, root)
 
             yield {
@@ -1174,7 +1180,7 @@ class UltraWorker:
             # ── stream LLM ────────────────────────────────────────────────────
             response = ""
             try:
-                for chunk in llm.chat_stream(messages, turn_type=state.task_class):
+                for chunk in llm.chat_stream(messages, turn_type=_mode_tt):
                     response += chunk
                     if not response.startswith("CLAW_ERROR:"):
                         yield {"type": "live_text",
@@ -1354,7 +1360,7 @@ class UltraWorker:
                     ]
                     fix_resp = ""
                     try:
-                        for chunk in llm.chat_stream(fix_msgs, turn_type=state.task_class):
+                        for chunk in llm.chat_stream(fix_msgs, turn_type=_mode_tt):
                             fix_resp += chunk
                     except Exception:
                         break
