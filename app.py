@@ -926,7 +926,7 @@ def chat_stream() -> Response:
 
     def run_agent() -> None:
         try:
-            # Pass mode override to ClawAgent (UltraWorker ignores it, uses its own routing)
+            # Pass mode override to the active agent (ClawAgent and UltraWorker both support it)
             stream_kwargs = {}
             if hasattr(agent, "run_streaming") and mode_override:
                 import inspect

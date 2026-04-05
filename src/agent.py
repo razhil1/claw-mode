@@ -992,26 +992,24 @@ class ClawAgent:
                         yield {"type": "plan_steps", "steps": plan_steps}
                 else:
                     # ── MANDATORY PLANNING GATE ───────────────────────────────
-                    # If the model skipped the PLAN block on turn 0, inject a
-                    # system nudge so the very next turn must produce a plan
-                    # before any tool execution is allowed.
-                    tool_calls_t0 = _parse_all_tool_calls(response_text)
-                    if tool_calls_t0:
-                        # Block execution — demand a plan first
-                        yield {
-                            "type": "thinking",
-                            "text": "Planning phase required — requesting plan before execution…",
-                        }
-                        messages.append({"role": "assistant", "content": response_text.strip() or "(empty)"})
-                        messages.append({
-                            "role":    "user",
-                            "content": (
-                                "[System] You must output a PLAN: block with numbered steps "
-                                "BEFORE issuing any tool calls. Please produce your plan now."
-                            ),
-                        })
-                        full_content.append(response_text)
-                        continue  # re-enter loop asking for plan
+                    # On turn 0, if the model produced no PLAN: block, demand
+                    # one before allowing any tool execution or completion.
+                    # This covers both the "jumped straight to tools" case and
+                    # the "returned prose with no plan then stopped" case.
+                    yield {
+                        "type": "thinking",
+                        "text": "Planning phase required — requesting plan before execution…",
+                    }
+                    messages.append({"role": "assistant", "content": response_text.strip() or "(empty)"})
+                    messages.append({
+                        "role":    "user",
+                        "content": (
+                            "[System] You must output a PLAN: block with numbered steps "
+                            "BEFORE issuing any tool calls or finishing. Please produce your plan now."
+                        ),
+                    })
+                    full_content.append(response_text)
+                    continue  # re-enter loop to get plan
 
             # ── emit clean prose ──────────────────────────────────────────────
             clean_prose = _strip_tool_lines(response_text)

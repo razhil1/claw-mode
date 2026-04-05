@@ -1047,7 +1047,7 @@ class UltraWorker:
 
     # ── streaming loop ────────────────────────────────────────────────────────
 
-    def run_streaming(self, user_prompt: str) -> Generator[dict, None, None]:  # noqa: C901
+    def run_streaming(self, user_prompt: str, mode_override: str = "") -> Generator[dict, None, None]:  # noqa: C901
         """
         Phase-driven streaming loop with full v4 safety and intelligence stack.
 
@@ -1062,6 +1062,12 @@ class UltraWorker:
         """
         self.clear_stop()
 
+        # Import here to avoid circular; _MODE_POLICIES lives in agent.py
+        from .agent import _MODE_POLICIES
+        _policy    = _MODE_POLICIES.get(mode_override, {})
+        _max_turns = _policy.get("max_turns", MAX_TURNS)
+        _read_only = _policy.get("read_only", False)
+
         root     = self._root()
         lang     = detect_language(root)
         state    = AgentState(lang=lang, task_class=classify_task(user_prompt))
@@ -1073,12 +1079,16 @@ class UltraWorker:
 
         yield {"type": "thinking", "text": f"⚡ UltraWorker v4 — {lang} workspace · task={state.task_class}"}
 
-        full_content:  list[str] = []
-        plan_steps:    list[str] = []
-        step_index:    int       = 0
-        commands_run:  list[str] = []
+        full_content:       list[str] = []
+        plan_steps:         list[str] = []
+        step_index:         int       = 0
+        commands_run:       list[str] = []
+        errors_encountered: list[str] = []
 
-        for turn in range(MAX_TURNS):
+        _WRITE_TOOLS = {"FileEditTool", "FilePatchTool", "FileDeleteTool",
+                        "BashTool", "WorkspaceZipTool", "WorkspaceUnzipTool"}
+
+        for turn in range(_max_turns):
             if self._stop.is_set():
                 yield {"type": "stopped", "message": "Stopped by user.", "turns": state.total_turns}
                 break
@@ -1144,6 +1154,25 @@ class UltraWorker:
                         plan_steps.clear()
                         plan_steps.extend(steps)
                         yield {"type": "plan_steps", "steps": plan_steps}
+                else:
+                    # Mandatory planning gate: if no plan on turn 0, demand one
+                    tool_calls_t0 = parse_tools(response)
+                    if tool_calls_t0:
+                        yield {
+                            "type": "thinking",
+                            "text": "Planning phase required — requesting plan before execution…",
+                        }
+                        ctx._raw.append({"role": "assistant",
+                                         "content": response.strip() or "(empty)"})
+                        ctx._raw.append({
+                            "role":    "user",
+                            "content": (
+                                "[System] You must output a PLAN: block with numbered steps "
+                                "BEFORE issuing any tool calls. Please produce your plan now."
+                            ),
+                        })
+                        full_content.append(response)
+                        continue
 
             # ── parse tools ───────────────────────────────────────────────────
             calls = parse_tools(response)
@@ -1185,6 +1214,22 @@ class UltraWorker:
 
             if len(calls) == 1:
                 tool, payload = calls[0]
+
+                # Read-only mode: block write/exec tools
+                if _read_only and tool in _WRITE_TOOLS:
+                    block_msg = (
+                        f"[Read-only mode] Tool '{tool}' is not permitted in "
+                        f"{mode_override or 'current'} mode. Only read/search tools are allowed."
+                    )
+                    errors_encountered.append(block_msg)
+                    yield {"type": "tool_result", "tool": tool, "result": block_msg,
+                           "elapsed": 0.0, "success": False, "attempt": 1}
+                    ctx._raw.append({"role": "assistant",
+                                     "content": response.strip() or "(empty)"})
+                    ctx._raw.append({"role": "user",
+                                     "content": f"[Tool Result — {tool}]\n{block_msg}"})
+                    full_content.append(response)
+                    continue
 
                 # Loop detection
                 phash = hashlib.md5(payload[:200].encode()).hexdigest()[:8]
@@ -1300,6 +1345,9 @@ class UltraWorker:
                     "success": tr.success,
                     "attempt": tr.attempt,
                 }
+                # Collect real errors
+                if not tr.success:
+                    errors_encountered.append(f"{tr.tool}: {tr.output[:150]}")
                 # Emit step_done / step_failed for tracked plan step
                 if plan_steps and step_index < len(plan_steps):
                     if tr.success:
@@ -1383,11 +1431,8 @@ class UltraWorker:
                 "steps_total":        len(plan_steps),
                 "steps_done":         step_index,
                 "lang":               state.lang,
-                "mode":               "ultra",
-                "errors_encountered": [
-                    f"{tr.tool}: {tr.output[:150]}"
-                    for tr in []  # UltraWorker stores results inline; no separate list needed
-                ],
+                "mode":               mode_override or "ultra",
+                "errors_encountered": errors_encountered,
                 "result_statement":   _result_stmt,
             }
 
