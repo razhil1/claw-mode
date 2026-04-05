@@ -5908,6 +5908,21 @@ updating::before {
     line-height: 1.3;
 }
 
+.deploy-card--soon {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.deploy-card--soon:hover {
+    border-color: var(--border-default);
+    background: var(--bg-base);
+}
+
+.deploy-card--soon:hover i {
+    color: var(--text-sub);
+}
+
 .deploy-log {
     background: var(--bg-base);
     border: 1px solid var(--border-dim);
