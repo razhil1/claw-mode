@@ -94,14 +94,53 @@ TASK_MODES: dict[str, dict] = {
     },
 }
 
-# Per-mode execution policies: override defaults when a mode is active.
-# Keys: max_turns (int), turn_type (str — passed to LLM router), read_only (bool)
+# Per-mode execution policies — full contract per specialist mode:
+#   max_turns    : hard ceiling on agent iterations
+#   turn_type    : routing key passed to LLMClient.route() for model selection
+#   preferred_model : preferred NVIDIA model key (None = use configured model)
+#   tool_priority   : ordered list of highest-priority tools for this mode
+#   read_only    : when True, write/exec tools are blocked
 _MODE_POLICIES: dict[str, dict] = {
-    "builder":    {"max_turns": 40, "turn_type": "coding",    "read_only": False},
-    "debugger":   {"max_turns": 30, "turn_type": "debugging", "read_only": False},
-    "refactorer": {"max_turns": 25, "turn_type": "coding",    "read_only": False},
-    "researcher": {"max_turns": 15, "turn_type": "thinking",  "read_only": True},
-    "reviewer":   {"max_turns": 15, "turn_type": "thinking",  "read_only": True},
+    "builder": {
+        "max_turns":       40,
+        "turn_type":       "coding",
+        "preferred_model": "nvidia:qwen2.5-coder-32b",
+        "tool_priority":   ["FileEditTool", "BashTool", "FilePatchTool",
+                            "FileReadTool", "ListDirTool"],
+        "read_only":       False,
+    },
+    "debugger": {
+        "max_turns":       30,
+        "turn_type":       "debugging",
+        "preferred_model": "nvidia:llama-3.3-70b-instruct",
+        "tool_priority":   ["BashTool", "FileReadTool", "SearchTool",
+                            "FileEditTool", "ListDirTool"],
+        "read_only":       False,
+    },
+    "refactorer": {
+        "max_turns":       25,
+        "turn_type":       "coding",
+        "preferred_model": "nvidia:nemotron-super-49b",
+        "tool_priority":   ["FileReadTool", "FilePatchTool", "FileEditTool",
+                            "ListDirTool", "SearchTool"],
+        "read_only":       False,
+    },
+    "researcher": {
+        "max_turns":       15,
+        "turn_type":       "thinking",
+        "preferred_model": "nvidia:deepseek-r1-distill-llama-70b",
+        "tool_priority":   ["SearchTool", "FileReadTool", "ListDirTool",
+                            "ViewLinesTool"],
+        "read_only":       True,
+    },
+    "reviewer": {
+        "max_turns":       15,
+        "turn_type":       "thinking",
+        "preferred_model": "nvidia:deepseek-r1-distill-llama-70b",
+        "tool_priority":   ["FileReadTool", "SearchTool", "ListDirTool",
+                            "ViewLinesTool"],
+        "read_only":       True,
+    },
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -871,8 +910,11 @@ class ClawAgent:
         """
         self.clear_stop()
 
-        llm        = LLMClient(model=self.model)
         mode       = mode_override if mode_override else detect_mode(user_prompt)
+        # Use mode-preferred model when running under a specialist mode
+        _mode_pol  = _MODE_POLICIES.get(mode, {})
+        _pref_model = _mode_pol.get("preferred_model", self.model)
+        llm        = LLMClient(model=_pref_model or self.model)
         messages   = self._build_messages(user_prompt, mode=mode)
         registry   = RollbackRegistry()
         tracker    = ChangeTracker()

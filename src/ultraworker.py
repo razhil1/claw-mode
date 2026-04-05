@@ -332,9 +332,43 @@ TOOL: WorkspaceUnzipTool| <backup_name.zip>
 """
 
 
-def build_system_prompt(lang: str) -> str:
+def build_system_prompt(lang: str, mode: str = "") -> str:
     hints = _LANG_RUN_HINTS.get(lang, "No language-specific hints available.")
-    return _PROMPT_TEMPLATE.format(lang=lang, hints=hints)
+    base  = _PROMPT_TEMPLATE.format(lang=lang, hints=hints)
+    mode_addenda: dict[str, str] = {
+        "builder": (
+            "\n\n══ BUILDER MODE ══\n"
+            "You are a specialist builder. Focus exclusively on creating and editing files. "
+            "Prefer Qwen2.5-Coder strategies: write complete, production-ready code. "
+            "Priority tools: FileEditTool, BashTool, FilePatchTool."
+        ),
+        "debugger": (
+            "\n\n══ DEBUGGER MODE ══\n"
+            "You are a specialist debugger. Reproduce → isolate → fix → verify. "
+            "Run the failing command first, read error messages carefully, then patch. "
+            "Priority tools: BashTool, FileReadTool, SearchTool."
+        ),
+        "refactorer": (
+            "\n\n══ REFACTORER MODE ══\n"
+            "You are a specialist refactorer. Read ALL relevant code before making any edits. "
+            "Prefer FilePatchTool for targeted changes. Preserve behaviour, improve structure. "
+            "Priority tools: FileReadTool, FilePatchTool, SearchTool."
+        ),
+        "researcher": (
+            "\n\n══ RESEARCHER MODE ══\n"
+            "You are a specialist researcher. READ ONLY — no file writes or shell execution. "
+            "Synthesise findings into a structured report. "
+            "Priority tools: SearchTool, FileReadTool, ListDirTool."
+        ),
+        "reviewer": (
+            "\n\n══ REVIEWER MODE ══\n"
+            "You are a specialist code reviewer. READ ONLY — no file writes or shell execution. "
+            "Rate each issue by severity (Critical/High/Medium/Low) and suggest concrete fixes. "
+            "Priority tools: FileReadTool, SearchTool, ListDirTool."
+        ),
+    }
+    addendum = mode_addenda.get(mode, "")
+    return base + addendum
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1071,13 +1105,16 @@ class UltraWorker:
         root     = self._root()
         lang     = detect_language(root)
         state    = AgentState(lang=lang, task_class=classify_task(user_prompt))
-        ctx      = ContextManager(build_system_prompt(lang))
+        ctx      = ContextManager(build_system_prompt(lang, mode=mode_override))
         registry = RollbackRegistry()
         tracker  = ChangeTracker()
         loop_guard        = LoopDetector(window=LOOP_DETECT_WINDOW)
         self._last_rollback = registry
 
-        yield {"type": "thinking", "text": f"⚡ UltraWorker v4 — {lang} workspace · task={state.task_class}"}
+        # Use mode-preferred model when running under a specialist mode
+        _pref_model = _policy.get("preferred_model", None)
+
+        yield {"type": "thinking", "text": f"⚡ UltraWorker v4 — {lang} workspace · mode={mode_override or 'auto'} · task={state.task_class}"}
 
         full_content:       list[str] = []
         plan_steps:         list[str] = []
@@ -1102,7 +1139,12 @@ class UltraWorker:
                 break
 
             state.total_turns = turn + 1
-            llm      = self._llm(state.current_phase)
+            # When a specialist mode specifies a preferred model, use it directly;
+            # otherwise fall back to phase-based model routing
+            if _pref_model:
+                llm = LLMClient(model=_pref_model)
+            else:
+                llm = self._llm(state.current_phase)
             messages = ctx.build(user_prompt, root)
 
             yield {

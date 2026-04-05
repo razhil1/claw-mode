@@ -197,6 +197,38 @@ function appendTerminalOutput(output) {
     }
 }
 
+function _renderToolLogChecklist(steps) {
+    const container = document.getElementById('toolLogEntries');
+    if (!container) return;
+
+    // Remove existing checklist block if present
+    const existing = container.querySelector('.tl-plan-checklist');
+    if (existing) existing.remove();
+
+    // Build checklist block and prepend to Tool Log
+    const block = document.createElement('div');
+    block.className = 'tl-plan-checklist log-entry';
+    block.id = 'tlChecklist';
+    const ol = document.createElement('ol');
+    ol.id = 'tlStepList';
+    ol.className = 'tl-step-list';
+    steps.forEach((step, i) => {
+        const li = document.createElement('li');
+        li.className = 'tl-step pending';
+        li.dataset.stepIndex = i;
+        li.innerHTML = `<span class="tl-step-icon"><i class="fa-regular fa-circle"></i></span><span class="tl-step-label">${escapeHtml(step)}</span>`;
+        ol.appendChild(li);
+    });
+    block.innerHTML = `<div class="log-header"><i class="fa-solid fa-list-check"></i><span class="log-tool">Execution Plan</span></div>`;
+    block.appendChild(ol);
+
+    // Remove the "No tool calls yet" placeholder if present
+    const empty = container.querySelector('.log-empty');
+    if (empty) empty.remove();
+
+    container.prepend(block);
+}
+
 function handleStreamEvent(evt, contentDiv) {
     if (evt.type === 'token' && evt.text) {
         contentDiv.dataset.md = (contentDiv.dataset.md || '') + evt.text;
@@ -281,15 +313,14 @@ function handleStreamEvent(evt, contentDiv) {
     }
 
     if (evt.type === 'plan_steps' && evt.steps && evt.steps.length > 0) {
-        // Always create/replace the plan element with an interactive step checklist
+        // Always create/replace the plan element with an interactive step checklist in chat
         let planEl = contentDiv.querySelector('.agent-plan');
         if (!planEl) {
             planEl = document.createElement('div');
             planEl.className = 'agent-plan';
             contentDiv.appendChild(planEl);
         }
-        // Always rewrite inner HTML so we get a real <ol>, even if plan event
-        // already created a <div class="plan-content">
+        // Always rewrite inner HTML so we get a real <ol>
         planEl.innerHTML = `
             <div class="plan-header" onclick="this.parentElement.classList.toggle('collapsed')">
                <i class="fa-solid fa-list-check"></i> Execution Plan
@@ -306,15 +337,23 @@ function handleStreamEvent(evt, contentDiv) {
             list.appendChild(li);
         });
         planEl.dataset.stepsCount = evt.steps.length;
+        // Also render the step checklist in the Tool Log panel
+        _renderToolLogChecklist(evt.steps);
         scrollChat();
     }
 
     if (evt.type === 'step_start') {
-        // Activate the matching plan step
+        // Update chat plan step
         const li = contentDiv.querySelector(`.plan-step[data-step-index="${evt.index}"]`);
         if (li) {
             li.className = 'plan-step active';
             li.querySelector('.step-icon').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+        }
+        // Update Tool Log panel step
+        const tli = document.querySelector(`#tlStepList .tl-step[data-step-index="${evt.index}"]`);
+        if (tli) {
+            tli.className = 'tl-step active';
+            tli.querySelector('.tl-step-icon').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
         }
         updateStepBar('Executing', `Step ${evt.index + 1}: ${(evt.label || '').slice(0, 60)}`);
     }
@@ -325,6 +364,11 @@ function handleStreamEvent(evt, contentDiv) {
             li.className = 'plan-step done';
             li.querySelector('.step-icon').innerHTML = '<i class="fa-solid fa-circle-check"></i>';
         }
+        const tli = document.querySelector(`#tlStepList .tl-step[data-step-index="${evt.index}"]`);
+        if (tli) {
+            tli.className = 'tl-step done';
+            tli.querySelector('.tl-step-icon').innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+        }
     }
 
     if (evt.type === 'step_failed') {
@@ -333,6 +377,12 @@ function handleStreamEvent(evt, contentDiv) {
             li.className = 'plan-step failed';
             li.querySelector('.step-icon').innerHTML = '<i class="fa-solid fa-circle-xmark"></i>';
             li.title = evt.error || 'Step failed';
+        }
+        const tli = document.querySelector(`#tlStepList .tl-step[data-step-index="${evt.index}"]`);
+        if (tli) {
+            tli.className = 'tl-step failed';
+            tli.querySelector('.tl-step-icon').innerHTML = '<i class="fa-solid fa-circle-xmark"></i>';
+            tli.title = evt.error || 'Step failed';
         }
     }
 
