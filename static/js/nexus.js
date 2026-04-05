@@ -478,8 +478,9 @@ async function deployTo(target) {
             }
             showToast(`Deployed to ${target} ✓`, 'success');
         } else {
-            _log(`<i class="fa-solid fa-times-circle"></i> ${escapeHtml(data.error || 'Deployment failed')}`, 'error');
-            showToast(`Deploy failed: ${data.error || 'unknown error'}`, 'error');
+            const errMsg = data.message || data.error || 'Deployment failed';
+            _log(`<i class="fa-solid fa-times-circle"></i> ${escapeHtml(errMsg)}`, 'error');
+            showToast(`Deploy failed: ${escapeHtml(errMsg)}`, 'error');
         }
     } catch (err) {
         _log(`<i class="fa-solid fa-times-circle"></i> Network error: ${escapeHtml(err.message)}`, 'error');
