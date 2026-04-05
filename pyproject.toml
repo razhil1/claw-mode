@@ -10,4 +10,5 @@ dependencies = [
     "gunicorn>=25.3.0",
     "openai>=2.30.0",
     "psycopg2-binary>=2.9.11",
+    "tiktoken>=0.7.0",
 ]
