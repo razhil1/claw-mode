@@ -377,10 +377,12 @@ def serve_workspace(filename: str = "index.html") -> Response:
         return _error("Access denied", 403, "TRAVERSAL")
 
     if not target.exists():
-        # Return a friendly placeholder instead of a bare 404
+        import html as _html
+        # Escape filename to prevent reflected XSS in the placeholder response
+        safe_name = _html.escape(filename, quote=True)
         placeholder = f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8">
-<title>Preview — {filename}</title>
+<title>Preview &#8212; {safe_name}</title>
 <style>
   body{{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
         min-height:100vh;margin:0;background:#0d1117;color:#c9d1d9;flex-direction:column;gap:16px;}}
@@ -390,9 +392,9 @@ def serve_workspace(filename: str = "index.html") -> Response:
   code{{background:#161b22;padding:2px 8px;border-radius:4px;font-size:.85rem;}}
 </style></head>
 <body>
-  <div class="icon">📄</div>
+  <div class="icon">&#128196;</div>
   <h2>No preview available</h2>
-  <p>File <code>{filename}</code> does not exist in the workspace yet.</p>
+  <p>File <code>{safe_name}</code> does not exist in the workspace yet.</p>
   <p>Ask the agent to create it, or open a different file.</p>
 </body></html>"""
         return Response(placeholder, status=200, mimetype="text/html")
@@ -1165,6 +1167,19 @@ def deploy_status() -> Response:
     )
 
 
+def _run_cmd_checked(cmd: str) -> tuple[str, bool]:
+    """Run a shell command; return (output, success). success=False on error markers."""
+    out = tool_bash_run(cmd)
+    failed = (
+        out.strip().startswith("[Command exited with code ")
+        or "error:" in out.lower()
+        or "fatal:" in out.lower()
+        or "Permission denied" in out
+        or "rejected" in out.lower()
+    )
+    return out, not failed
+
+
 @app.route("/api/deploy/push", methods=["POST"])
 def deploy_push() -> Response:
     """Push current branch to remote origin."""
@@ -1176,14 +1191,30 @@ def deploy_push() -> Response:
     remote = remote_raw
 
     branch = tool_bash_run("git rev-parse --abbrev-ref HEAD 2>&1").strip()
-    # Stage & commit any unstaged changes if a message is provided
     commit_msg = data.get("commit_message", "").strip()
-    out_lines = []
+    out_lines: list[str] = []
+
     if commit_msg:
-        out_lines.append(tool_bash_run("git add -A 2>&1"))
-        # Use shlex.quote so the message cannot inject shell commands
-        out_lines.append(tool_bash_run(f"git commit -m {shlex.quote(commit_msg)} 2>&1"))
-    out_lines.append(tool_bash_run(f"git push {shlex.quote(remote)} {shlex.quote(branch)} 2>&1"))
+        add_out, add_ok = _run_cmd_checked("git add -A 2>&1")
+        out_lines.append(add_out)
+        if not add_ok:
+            return _error(f"git add failed:\n{add_out}", code="GIT_ADD_FAILED")
+
+        commit_out, commit_ok = _run_cmd_checked(
+            f"git commit -m {shlex.quote(commit_msg)} 2>&1"
+        )
+        out_lines.append(commit_out)
+        # "nothing to commit" is not a failure
+        if not commit_ok and "nothing to commit" not in commit_out.lower():
+            return _error(f"git commit failed:\n{commit_out}", code="GIT_COMMIT_FAILED")
+
+    push_out, push_ok = _run_cmd_checked(
+        f"git push {shlex.quote(remote)} {shlex.quote(branch)} 2>&1"
+    )
+    out_lines.append(push_out)
+    if not push_ok:
+        return _error(f"git push failed:\n{push_out}", code="GIT_PUSH_FAILED")
+
     return _ok(output="\n".join(out_lines), branch=branch, remote=remote)
 
 
