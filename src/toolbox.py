@@ -11,11 +11,16 @@ _file_locks_meta = threading.Lock()
 
 
 def _get_file_lock(path: str) -> threading.Lock:
-    """Return a per-path threading.Lock, creating it if needed."""
+    """Return a per-path threading.Lock keyed on the resolved canonical path."""
+    # Normalize to resolved absolute path so 'foo.txt' and './foo.txt' share the same lock
+    try:
+        canonical = str(Path(path).resolve())
+    except Exception:
+        canonical = path
     with _file_locks_meta:
-        if path not in _file_locks:
-            _file_locks[path] = threading.Lock()
-        return _file_locks[path]
+        if canonical not in _file_locks:
+            _file_locks[canonical] = threading.Lock()
+        return _file_locks[canonical]
 
 
 def get_workspace_root():

@@ -1558,14 +1558,20 @@ def db_query() -> Response:
         return _error("'query' is required", code="NO_QUERY")
 
     # Safety: only allow read-only statements in the DB Explorer API.
-    # WITH is excluded because writable CTEs (WITH ... AS (INSERT/UPDATE/DELETE ...))
-    # can execute mutations while looking like a SELECT to a naive first-word check.
+    # WITH is excluded because writable CTEs (WITH...AS(INSERT/UPDATE)) bypass first-word check.
+    # Multi-statement SQL (semicolons) is rejected to block mutation piggyback attacks.
     first_word = sql.split()[0].upper()
     if first_word not in ("SELECT", "PRAGMA", "EXPLAIN", "SHOW", "DESCRIBE", "DESC"):
         return _error(
             "Only SELECT / PRAGMA / EXPLAIN / SHOW / DESCRIBE queries are allowed "
             "via the DB Explorer. Use the agent to modify data.",
             code="WRITE_NOT_ALLOWED",
+        )
+    # Block multi-statement SQL (anything after a semicolon)
+    if ";" in sql.rstrip(";"):
+        return _error(
+            "Multi-statement SQL is not allowed in the DB Explorer.",
+            code="MULTI_STATEMENT",
         )
 
     with _db_lock:
@@ -1579,7 +1585,8 @@ def db_query() -> Response:
             import sqlite3
             from src.toolbox import enforce_safe_path
             full = enforce_safe_path(conn_meta["path"])
-            conn = sqlite3.connect(str(full))
+            # Open read-only via URI so SQLite enforces the restriction at engine level
+            conn = sqlite3.connect(f"file:{full}?mode=ro", uri=True)
             conn.row_factory = sqlite3.Row
             cur  = conn.execute(sql)
             rows = [dict(r) for r in cur.fetchmany(500)]
@@ -1590,10 +1597,13 @@ def db_query() -> Response:
         if conn_meta["type"] == "pg":
             import psycopg2, psycopg2.extras
             conn = psycopg2.connect(conn_meta["url"])
+            # Use a read-only transaction so PostgreSQL rejects any writes at engine level
+            conn.set_session(readonly=True, autocommit=False)
             cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
             cur.execute(sql)
             rows = [dict(r) for r in cur.fetchmany(500)]
             cols = [d.name for d in cur.description] if cur.description else []
+            conn.rollback()
             conn.close()
             return _ok(columns=cols, rows=rows, count=len(rows))
 
