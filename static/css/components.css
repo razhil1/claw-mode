@@ -1,0 +1,1283 @@
+/* ═══════════════════════════════════════════════════
+   NEXUS IDE — components.css
+   Message bubbles · Tool badges · Panels · Cards
+═══════════════════════════════════════════════════ */
+
+/* ── Message Meta Row ── */
+.message-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+}
+
+.message-role {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+}
+
+.message-time {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    margin-left: auto;
+}
+
+/* Ultra mode label in message */
+.ultra-msg-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--amber);
+    background: var(--amber-dim);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 4px;
+    padding: 1px 6px;
+}
+
+.ultra-msg-badge i {
+    font-size: 8px;
+}
+
+/* ── Agent Reasoning Layers (collapsible) ── */
+.thought-block {
+    background: var(--bg-base);
+    border: 1px solid var(--border-dim);
+    border-left: 3px solid var(--text-muted);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    margin: 6px 0;
+}
+
+.thought-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.thought-header i {
+    font-size: 9px;
+    transition: transform var(--t-std);
+}
+
+.thought-block.open .thought-header i {
+    transform: rotate(90deg);
+}
+
+.thought-content {
+    display: none;
+    padding: 6px 10px 10px;
+    font-size: 12px;
+    color: var(--text-sub);
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+.thought-block.open .thought-content {
+    display: block;
+}
+
+/* ── Code Block with Copy btn ── */
+.code-block-wrap {
+    position: relative;
+    margin: 8px 0;
+    border-radius: var(--r-sm);
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+}
+
+.code-block-wrap .code-block-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 10px;
+    background: var(--bg-overlay);
+    border-bottom: 1px solid var(--border-dim);
+}
+
+.code-block-wrap pre {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+}
+
+.copy-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: 1px solid var(--border-dim);
+    border-radius: var(--r-xs);
+    color: var(--text-muted);
+    font-size: 10px;
+    padding: 2px 7px;
+    cursor: pointer;
+    transition: all var(--t-fast);
+}
+
+.copy-btn:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+}
+
+.copy-btn.copied {
+    color: var(--green);
+    border-color: var(--green);
+}
+
+/* ── Error / Warning Banners in Chat ── */
+.chat-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 10px 12px;
+    border-radius: var(--r-md);
+    font-size: 12px;
+    line-height: 1.5;
+    margin: 4px 0;
+}
+
+.chat-banner i {
+    flex-shrink: 0;
+    font-size: 13px;
+    margin-top: 1px;
+}
+
+.chat-banner.error {
+    background: var(--red-dim);
+    border: 1px solid rgba(255, 71, 87, 0.25);
+    color: var(--red);
+}
+
+.chat-banner.warning {
+    background: var(--amber-dim);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    color: var(--amber);
+}
+
+.chat-banner.info {
+    background: var(--cyan-dim);
+    border: 1px solid rgba(0, 217, 255, 0.2);
+    color: var(--cyan);
+}
+
+.chat-banner.success {
+    background: var(--green-dim);
+    border: 1px solid rgba(0, 229, 160, 0.2);
+    color: var(--green);
+}
+
+.chat-banner a,
+.chat-banner button {
+    color: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+}
+
+/* ── Tool Step Log (execution log wrap) ── */
+.exec-log-wrap {
+    margin: 8px 0;
+    border: 1px solid var(--border-dim);
+    border-radius: var(--r-sm);
+    overflow: hidden;
+}
+
+.exec-log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 10px;
+    background: var(--bg-elevated);
+    font-size: 10.5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--t-fast);
+}
+
+.exec-log-header:hover {
+    background: var(--bg-active);
+    color: var(--text-sub);
+}
+
+.exec-log-header i {
+    font-size: 9px;
+    transition: transform var(--t-std);
+}
+
+.exec-log-wrap.open .exec-log-header i {
+    transform: rotate(90deg);
+}
+
+.exec-log-body {
+    display: none;
+    background: var(--bg-base);
+    padding: 8px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-sub);
+    max-height: 220px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.7;
+}
+
+.exec-log-wrap.open .exec-log-body {
+    display: block;
+}
+
+/* ── Profile Menu Dropdown ── */
+.profile-menu {
+    position: fixed;
+    top: var(--top-bar-h);
+    right: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    min-width: 200px;
+    padding: 8px;
+    z-index: 6000;
+    box-shadow: var(--shadow-lg);
+    display: none;
+    animation: dropIn 0.12s ease;
+}
+
+.profile-menu.open {
+    display: block;
+}
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    margin-bottom: 6px;
+}
+
+.profile-avatar-lg {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--cyan), var(--violet));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display);
+    font-weight: 700;
+    color: var(--text-invert);
+    font-size: 14px;
+}
+
+.profile-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.profile-plan {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.profile-sep {
+    height: 1px;
+    background: var(--border-dim);
+    margin: 4px 0;
+}
+
+.profile-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 9px;
+    font-size: 12px;
+    color: var(--text-sub);
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: all var(--t-fast);
+}
+
+.profile-item:hover {
+    background: var(--bg-active);
+    color: var(--text);
+}
+
+.profile-item i {
+    width: 14px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* ── Notification Panel ── */
+.notifications-panel {
+    position: fixed;
+    bottom: calc(var(--status-bar-h) + 8px);
+    left: calc(var(--activity-bar-w) + 8px);
+    width: 320px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 6000;
+    display: none;
+    overflow: hidden;
+    animation: dropIn 0.15s ease;
+}
+
+.notifications-panel.open {
+    display: block;
+}
+
+.notif-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-dim);
+}
+
+.notif-header h4 {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.notif-header button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    transition: color var(--t-fast);
+}
+
+.notif-header button:hover {
+    color: var(--text);
+}
+
+.notif-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.notif-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-dim);
+    cursor: pointer;
+    transition: background var(--t-fast);
+}
+
+.notif-item:hover {
+    background: var(--bg-active);
+}
+
+.notif-item:last-child {
+    border-bottom: none;
+}
+
+.notif-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--r-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.notif-icon.success {
+    background: var(--green-dim);
+    color: var(--green);
+}
+
+.notif-icon.error {
+    background: var(--red-dim);
+    color: var(--red);
+}
+
+.notif-icon.info {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+}
+
+.notif-icon.warning {
+    background: var(--amber-dim);
+    color: var(--amber);
+}
+
+.notif-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.notif-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 2px;
+}
+
+.notif-msg {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.notif-time {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 2px;
+}
+
+/* ── Agent Mode / Phase Labels ── */
+.phase-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    padding: 2px 7px;
+    border-radius: var(--r-xs);
+    font-family: var(--font-mono);
+}
+
+.phase-thinking {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border: 1px solid rgba(0, 217, 255, 0.2);
+}
+
+.phase-reasoning {
+    background: var(--violet-dim);
+    color: var(--violet);
+    border: 1px solid rgba(124, 58, 237, 0.2);
+}
+
+.phase-executing {
+    background: var(--amber-dim);
+    color: var(--amber);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.phase-editing {
+    background: rgba(255, 112, 67, .1);
+    color: var(--orange);
+    border: 1px solid rgba(255, 112, 67, 0.2);
+}
+
+.phase-updating {
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid rgba(0, 229, 160, 0.2);
+}
+
+.phase-done {
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid rgba(0, 229, 160, 0.2);
+}
+
+.phase-error {
+    background: var(--red-dim);
+    color: var(--red);
+    border: 1px solid rgba(255, 71, 87, 0.2);
+}
+
+/* ── File Change Indicator (editor tab) ── */
+.tab-unsaved-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 4px var(--amber);
+    animation: unsavedPulse 3s ease infinite;
+}
+
+/* ── Search result highlight ── */
+.search-highlight {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--amber);
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+/* ── Inline suggestion autocomplete ── */
+.inline-suggestion {
+    color: var(--text-muted);
+    opacity: 0.6;
+    pointer-events: none;
+    font-style: italic;
+}
+
+/* ── Model Badge ── */
+.model-role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 7px;
+    border-radius: 99px;
+}
+
+.role-fast {
+    background: var(--green-dim);
+    color: var(--green);
+}
+
+.role-smart {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+}
+
+.role-coding {
+    background: var(--blue-dim);
+    color: var(--blue);
+}
+
+.role-think {
+    background: var(--violet-dim);
+    color: var(--violet);
+}
+
+.role-powerful {
+    background: var(--red-dim);
+    color: var(--orange);
+}
+
+.role-balanced {
+    background: var(--bg-overlay);
+    color: var(--text-muted);
+}
+
+.role-free {
+    background: var(--amber-dim);
+    color: var(--amber);
+}
+
+/* ── Workspace Export / Import buttons ── */
+.ws-action-row {
+    display: flex;
+    gap: 6px;
+    padding: 0 10px 10px;
+}
+
+.ws-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--r-md);
+    padding: 10px 6px;
+    cursor: pointer;
+    transition: all var(--t-fast);
+}
+
+.ws-btn:hover {
+    border-color: var(--border-focus);
+    background: var(--cyan-dim);
+}
+
+.ws-btn i {
+    font-size: 16px;
+    color: var(--cyan);
+}
+
+.ws-btn span {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+/* ── Patch mode indicator ── */
+.patch-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--green);
+    background: var(--green-dim);
+    border: 1px solid rgba(0, 229, 160, 0.2);
+    border-radius: var(--r-xs);
+    padding: 1px 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.patch-mode-badge i {
+    font-size: 8px;
+}
+
+/* ── Run Config items ── */
+.run-config-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-dim);
+    border-radius: var(--r-sm);
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all var(--t-fast);
+}
+
+.run-config-item:hover {
+    border-color: var(--border-default);
+    background: var(--bg-active);
+}
+
+.run-config-item i {
+    color: var(--green);
+    font-size: 14px;
+}
+
+.run-config-item .rc-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+}
+
+.run-config-item .rc-cmd {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+/* ── Git commit history item ── */
+.git-commit-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: var(--r-xs);
+    cursor: pointer;
+    transition: background var(--t-fast);
+}
+
+.git-commit-item:hover {
+    background: var(--bg-elevated);
+}
+
+.gc-hash {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--violet);
+    flex-shrink: 0;
+    padding-top: 1px;
+}
+
+.gc-msg {
+    flex: 1;
+    min-width: 0;
+}
+
+.gc-msg-text {
+    font-size: 11.5px;
+    color: var(--text-sub);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.gc-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+/* ── Breakpoint item ── */
+.bp-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 8px;
+    font-size: 11.5px;
+    color: var(--text-sub);
+    border-radius: var(--r-xs);
+    cursor: pointer;
+    transition: background var(--t-fast);
+}
+
+.bp-item:hover {
+    background: var(--bg-elevated);
+}
+
+.bp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 4px var(--red);
+    flex-shrink: 0;
+}
+
+.bp-file {
+    color: var(--text-muted);
+    font-size: 10px;
+    margin-left: auto;
+    font-family: var(--font-mono);
+}
+
+/* ── Variable inspect item ── */
+.var-item {
+    padding: 3px 8px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-sub);
+}
+
+.var-name {
+    color: var(--cyan);
+}
+
+.var-type {
+    color: var(--violet);
+    font-size: 10px;
+}
+
+.var-val {
+    color: var(--amber);
+}
+
+/* ── Docker item ── */
+.docker-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px;
+    border-radius: var(--r-xs);
+    cursor: pointer;
+    transition: background var(--t-fast);
+}
+
+.docker-item:hover {
+    background: var(--bg-elevated);
+}
+
+.docker-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.docker-status-dot.running {
+    background: var(--green);
+    box-shadow: 0 0 4px var(--green);
+}
+
+.docker-status-dot.stopped {
+    background: var(--red);
+}
+
+.docker-status-dot.paused {
+    background: var(--amber);
+}
+
+.docker-item-name {
+    font-size: 12px;
+    color: var(--text);
+    flex: 1;
+}
+
+.docker-item-id {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.docker-item-port {
+    font-size: 10px;
+    color: var(--cyan);
+}
+
+/* ── DB connection item ── */
+.db-conn-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-dim);
+    border-radius: var(--r-sm);
+    margin-bottom: 5px;
+    cursor: pointer;
+    transition: all var(--t-fast);
+}
+
+.db-conn-item:hover {
+    border-color: var(--cyan);
+}
+
+.db-conn-item i {
+    color: var(--amber);
+    font-size: 14px;
+}
+
+.db-conn-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+}
+
+.db-conn-type {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.db-conn-status {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.db-conn-status.connected {
+    background: var(--green);
+}
+
+.db-conn-status.error {
+    background: var(--red);
+}
+
+/* ── API saved request item ── */
+.api-saved-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 7px;
+    border-radius: var(--r-xs);
+    cursor: pointer;
+    transition: background var(--t-fast);
+}
+
+.api-saved-item:hover {
+    background: var(--bg-elevated);
+}
+
+.api-method-tag {
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 42px;
+    text-align: center;
+    padding: 1px 5px;
+    border-radius: var(--r-xs);
+}
+
+.method-GET {
+    background: var(--green-dim);
+    color: var(--green);
+}
+
+.method-POST {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+}
+
+.method-PUT {
+    background: var(--amber-dim);
+    color: var(--amber);
+}
+
+.method-DELETE {
+    background: var(--red-dim);
+    color: var(--red);
+}
+
+.method-PATCH {
+    background: var(--violet-dim);
+    color: var(--violet);
+}
+
+.api-saved-url {
+    font-size: 11px;
+    color: var(--text-sub);
+    font-family: var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+/* ── Status bar git branch pill ── */
+.sb-branch-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 8px;
+    height: 100%;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--t-fast);
+    background: none;
+    border: none;
+}
+
+.sb-branch-pill:hover {
+    background: var(--bg-elevated);
+    color: var(--text-sub);
+}
+
+.sb-branch-pill i {
+    color: var(--violet);
+}
+
+/* ── Agent spawner card (multi-agent) ── */
+.spawn-agent-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-elevated);
+    border: 1px dashed var(--border-default);
+    border-radius: var(--r-md);
+    cursor: pointer;
+    transition: all var(--t-fast);
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: 8px 10px;
+}
+
+.spawn-agent-btn:hover {
+    border-color: var(--cyan);
+    color: var(--cyan);
+    background: var(--cyan-dim);
+}
+
+.spawn-agent-btn i {
+    font-size: 14px;
+}
+
+/* ═══════════════════════════════════════════════════
+   AGENT TOOL BADGES & RESULTS (inline in chat)
+═══════════════════════════════════════════════════ */
+
+/* Tool call badge — shows which tool the agent is invoking */
+.agent-tool-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    margin: 6px 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-dim);
+    border-left: 3px solid var(--cyan);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    font-size: 11px;
+    color: var(--text-sub);
+    font-family: var(--font-mono);
+    animation: fadeSlideIn 0.2s ease;
+}
+
+.agent-tool-badge i {
+    color: var(--cyan);
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.agent-tool-badge strong {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.agent-tool-badge code {
+    color: var(--text-muted);
+    font-size: 10px;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.agent-tool-badge.retry {
+    border-left-color: var(--amber);
+}
+
+.agent-tool-badge.retry i {
+    color: var(--amber);
+}
+
+.agent-tool-badge.warning {
+    border-left-color: var(--amber);
+}
+
+.agent-tool-badge.warning i {
+    color: var(--amber);
+}
+
+/* Tool result — collapsible output from a tool execution */
+.agent-tool-result {
+    margin: 4px 0;
+    border: 1px solid var(--border-dim);
+    border-radius: var(--r-sm);
+    overflow: hidden;
+    animation: fadeSlideIn 0.2s ease;
+}
+
+.agent-tool-result.success {
+    border-left: 3px solid var(--green);
+}
+
+.agent-tool-result.error {
+    border-left: 3px solid var(--red);
+}
+
+.tool-result-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: var(--bg-elevated);
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--t-fast);
+}
+
+.tool-result-header:hover {
+    background: var(--bg-active);
+}
+
+.tool-result-header i:first-child {
+    font-size: 12px;
+}
+
+.agent-tool-result.success .tool-result-header i:first-child {
+    color: var(--green);
+}
+
+.agent-tool-result.error .tool-result-header i:first-child {
+    color: var(--red);
+}
+
+.tool-result-header strong {
+    color: var(--text-sub);
+    font-weight: 600;
+}
+
+.tool-result-header .toggle-icon {
+    margin-left: auto;
+    font-size: 9px;
+    transition: transform var(--t-std);
+}
+
+.agent-tool-result.expanded .tool-result-header .toggle-icon {
+    transform: rotate(180deg);
+}
+
+.tool-result-body {
+    display: none;
+    padding: 8px 10px;
+    background: var(--bg-base);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-sub);
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.agent-tool-result.expanded .tool-result-body {
+    display: block;
+}
+
+/* Agent plan block */
+.agent-plan {
+    background: var(--bg-base);
+    border: 1px solid var(--border-dim);
+    border-left: 3px solid var(--violet);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    margin: 8px 0;
+    overflow: hidden;
+}
+
+.plan-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--violet);
+    cursor: pointer;
+    user-select: none;
+}
+
+.plan-header i:first-child {
+    font-size: 11px;
+}
+
+.plan-header .toggle-icon {
+    margin-left: auto;
+    font-size: 9px;
+    transition: transform var(--t-std);
+}
+
+.agent-plan.collapsed .plan-content {
+    display: none;
+}
+
+.agent-plan.collapsed .plan-header .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.plan-content {
+    padding: 6px 10px 10px;
+    font-size: 12px;
+    color: var(--text-sub);
+    line-height: 1.6;
+}
+
+.plan-content ul,
+.plan-content ol {
+    padding-left: 18px;
+    margin: 4px 0;
+}
+
+.plan-content li {
+    margin: 2px 0;
+}
+
+/* Agent thought block (reasoning trace) */
+.agent-thought {
+    background: var(--bg-base);
+    border: 1px solid var(--border-dim);
+    border-left: 3px solid var(--text-muted);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    margin: 6px 0;
+}
+
+.agent-thought .thought-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.agent-thought .thought-header .toggle-icon {
+    margin-left: auto;
+    font-size: 9px;
+    transition: transform var(--t-std);
+}
+
+.agent-thought.collapsed .thought-content {
+    display: none;
+}
+
+.agent-thought.collapsed .thought-header .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.agent-thought .thought-content {
+    padding: 6px 10px 10px;
+    font-size: 12px;
+    color: var(--text-sub);
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+/* Terminal agent output tag */
+.sterm-agent-tag {
+    display: inline-block;
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 1px 6px;
+    border-radius: var(--r-xs);
+    margin-bottom: 4px;
+}
+
+.sterm-result.agent-output {
+    border-left: 2px solid var(--cyan);
+    padding-left: 10px;
+    margin: 4px 0;
+}
+
+.sterm-result.agent-output pre {
+    color: var(--text-sub);
+    font-size: 11px;
+}
+
+/* System message styling */
+.system-msg {
+    justify-content: center;
+}
+
+.system-content {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 6px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-dim);
+    border-radius: 99px;
+    max-width: 700px;
+}
+
+/* Fade-slide animation for tool badges */
+@keyframes fadeSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

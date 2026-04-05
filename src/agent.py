@@ -1,310 +1,952 @@
 """
-ClawAgent — Multi-turn agentic loop with tool execution and smart model routing.
-Each call to run_streaming() yields SSE event dicts describing every step.
+╔══════════════════════════════════════════════════════════════════════════════╗
+║         ClawAgent v2 — Elite Autonomous Coding Agent                        ║
+║                                                                              ║
+║  ARCHITECTURE                                                                ║
+║  ─────────────────────────────────────────────────────────────────────────  ║
+║  • Plan → Execute → Verify → Done structured loop                           ║
+║  • Multi-tool parsing per turn (executes first, queues rest)                ║
+║  • Auto-retry with LLM correction on tool failure (up to MAX_RETRIES)       ║
+║  • RollbackRegistry — per-session file snapshots with full undo             ║
+║  • LoopDetector — escapes stuck repetitive cycles automatically             ║
+║  • ChangeTracker — SHA-256 file diff for regression detection               ║
+║  • Context compression — LLM-powered summarisation for long sessions        ║
+║  • ThinkTool — internal reasoning scratchpad with zero side effects         ║
+║  • Task classifier — routes turn_type for smart model selection             ║
+║  • Consecutive-error breaker — halts runaway failure cascades               ║
+║  • Smart model routing — per-turn model selection based on last tool used   ║
+║  • Streamed SSE events with granular phase indicators                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import re
-import time
 import threading
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Generator
 
-from .llm import LLMClient, DEFAULT_MODEL, get_all_models, set_runtime_key
+from .llm import LLMClient, DEFAULT_MODEL, get_all_models, SMART_MODELS
 from .toolbox import (
     tool_bash_run,
     tool_file_read,
     tool_file_edit,
+    tool_file_patch,
     tool_file_delete,
     tool_list_dir,
     tool_search,
     tool_view_file_lines,
+    tool_workspace_zip,
+    tool_workspace_unzip,
 )
 
-MAX_AGENT_TURNS = 18
 
-TOOL_PATTERN = re.compile(
-    r"TOOL:\s*(\w+)\s*\|+\s*([\s\S]*?)(?=\nTOOL:|\Z)", re.MULTILINE
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONSTANTS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+MAX_AGENT_TURNS        = 40    # Hard ceiling for any single run
+MAX_HISTORY_PAIRS      = 20    # Conversation pairs kept across sessions
+MAX_RETRIES            = 3     # Per-tool LLM-corrected retry limit
+LOOP_DETECT_WINDOW     = 6     # Turns scanned for repetitive cycle detection
+CONTEXT_COMPRESS_AT    = 16    # Compress history after N message pairs
+MAX_CONSECUTIVE_ERRORS = 6     # Error-cascade breaker threshold
+RESULT_TRIM_CHARS      = 2_500 # Tool output trimmed to this in history
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SYSTEM PROMPT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+SYSTEM_PROMPT = """\
+You are BRAIN — an elite autonomous full-stack coding agent running inside a \
+developer IDE. You have complete, unrestricted control over the workspace. \
+You operate with surgical precision and professional transparency.
+
+Your primary environment and root directory is 'agent_workspace'. You have full, \
+unrestricted access to this folder, including permission to create, read, \
+modify, and delete any files or directories within it. This is your active \
+domain; treat it as your own production environment.
+
+══════════════════════════════════════════
+ MANDATORY OPERATING PROCEDURE
+══════════════════════════════════════════
+
+STEP 0 — REASONING (every turn)
+  You MUST start EVERY response with a <thought> block.
+  In this block:
+  1. ANALYSE the user's intent and the current workspace state.
+  2. CONSIDER at least 2-3 different ways to achieve the goal.
+  3. EVALUATE pros/cons, risks, and trade-offs for each approach.
+  4. DECIDE on the optimal path and justify it.
+  Format:
+  <thought>
+  Intent: <summary>
+  Approaches:
+  - Option A: <pros/cons>
+  - Option B: <pros/cons>
+  Decision: <chosen path + reason>
+  Risks: <what could go wrong + mitigation>
+  </thought>
+
+STEP 1 — ORIENT
+  ALWAYS start by scanning the workspace if unsure:
+    TOOL: ListDirTool | .
+  Then read every file you'll touch BEFORE editing.
+
+STEP 2 — PLAN (turn 0 or when strategy changes)
+  Output a numbered PLAN: block.
+  PLAN:
+  1. <what you'll do>
+  2. <what you'll do>
+
+STEP 3 — EXECUTE
+  Issue exactly ONE tool call per response. Chain steps across turns.
+
+STEP 4 — VERIFY
+  After every write, confirm with BashTool or FileReadTool.
+  If anything is wrong, patch it immediately.
+
+STEP 5 — FINISH
+  End with a DONE: block listing every file changed and why.
+
+══════════════════════════════════════════
+ COMMUNICATION RULES (CRITICAL)
+══════════════════════════════════════════
+• ZERO CONVERSATIONAL FILLER. No pleasantries like "Sure thing" or "I can help with that".
+• Output <thought> then PLAN:/TOOL: blocks immediately.
+• Use ThinkTool for internal, cross-turn reasoning.
+
+══════════════════════════════════════════
+ TOOLS (copy format exactly)
+══════════════════════════════════════════
+TOOL: ListDirTool       | <path>
+TOOL: FileReadTool      | <path>
+TOOL: ViewFileLinesTool | <path> ::: <start>,<end>
+TOOL: SearchTool        | <path> ::: <regex>
+TOOL: FileEditTool      | <path> ::: <full content>
+TOOL: FilePatchTool     | <path> ::: <old> === <new>
+TOOL: FileDeleteTool    | <path>
+TOOL: BashTool          | <command>
+TOOL: ThinkTool         | <deep reasoning trace>
+TOOL: WorkspaceZipTool  | <backup_name.zip>
+TOOL: WorkspaceUnzipTool| <backup_name.zip>
+
+══════════════════════════════════════════
+ EDITING RULES (non-negotiable)
+══════════════════════════════════════════
+• NEVER overwrite a whole file to change a few lines — use FilePatchTool.
+• Match exact whitespace and indentation. Verify every write immediately.
+
+Full autonomy. Think deeply. Act precisely.\
+"""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TASK CLASSIFIER
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def classify_task(prompt: str) -> str:
+    """
+    Classify the user's intent for smart-model routing.
+
+    Returns one of: "debugging" | "coding" | "thinking" | "default"
+    """
+    p = prompt.lower()
+    if any(w in p for w in ["debug", "fix", "error", "bug", "broken", "crash", "fail"]):
+        return "debugging"
+    if any(w in p for w in ["create", "build", "make", "write", "add", "generate",
+                              "refactor", "improve", "optimise", "optimize", "clean"]):
+        return "coding"
+    if any(w in p for w in ["read", "explain", "what", "why", "how", "describe",
+                              "analyse", "analyze", "review", "summarise", "summarize"]):
+        return "thinking"
+    return "default"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ROLLBACK REGISTRY
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class RollbackRegistry:
+    """
+    Snapshot file contents before any destructive tool runs.
+    Enables full per-session undo on demand.
+    """
+
+    def __init__(self) -> None:
+        self._snapshots: dict[str, str | None] = {}
+
+    def snapshot(self, path: str) -> None:
+        """Capture current content of a file. No-op if already snapshotted."""
+        if path in self._snapshots:
+            return
+        try:
+            self._snapshots[path] = Path(path).read_text(encoding="utf-8")
+        except FileNotFoundError:
+            self._snapshots[path] = None  # file is new — rollback = delete
+
+    def rollback(self, path: str) -> str:
+        original = self._snapshots.get(path)
+        p = Path(path)
+        try:
+            if original is None:
+                p.unlink(missing_ok=True)
+                return f"Rolled back: deleted newly-created {path}"
+            p.write_text(original, encoding="utf-8")
+            return f"Rolled back: restored {path} to original state"
+        except Exception as exc:
+            return f"Rollback failed for {path}: {exc}"
+
+    def rollback_all(self) -> list[str]:
+        return [self.rollback(p) for p in list(self._snapshots)]
+
+    @property
+    def has_snapshots(self) -> bool:
+        return bool(self._snapshots)
+
+    @property
+    def tracked_paths(self) -> list[str]:
+        return list(self._snapshots.keys())
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# LOOP DETECTOR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class LoopDetector:
+    """Detect when the agent is stuck repeating the same tool call."""
+
+    def __init__(self, window: int = LOOP_DETECT_WINDOW) -> None:
+        self._window  = window
+        self._history: list[str] = []
+
+    def record(self, tool_name: str, payload_hash: str) -> None:
+        self._history.append(f"{tool_name}:{payload_hash}")
+        if len(self._history) > self._window * 2:
+            self._history = self._history[-self._window * 2:]
+
+    def is_looping(self) -> bool:
+        if len(self._history) < self._window:
+            return False
+        recent = self._history[-self._window:]
+        return len(set(recent)) <= 2
+
+    def hint(self) -> str:
+        recent = self._history[-self._window:]
+        return (
+            f"LOOP DETECTED: You've made {self._window} identical or highly repetitive tool calls. "
+            "CRITICAL: Stop repeating edits! If your changes aren't satisfying your goals, you might be editing the wrong file or missing a dependency. "
+            "Use SearchTool to find related code or ListDirTool to explore the full directory tree for better candidates."
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CHANGE TRACKER
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class FileChange:
+    path:       str
+    before_sha: str | None
+    after_sha:  str | None = None
+
+    @staticmethod
+    def sha(path: str) -> str | None:
+        try:
+            return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:12]
+        except Exception:
+            return None
+
+    def record_after(self) -> None:
+        self.after_sha = self.sha(self.path)
+
+    @property
+    def changed(self) -> bool:
+        return self.before_sha != self.after_sha
+
+    def summary(self) -> str:
+        if self.before_sha is None:
+            return f"{self.path} (created)"
+        if self.after_sha is None:
+            return f"{self.path} (deleted)"
+        if self.changed:
+            return f"{self.path} ({self.before_sha} → {self.after_sha})"
+        return f"{self.path} (unchanged)"
+
+
+class ChangeTracker:
+    """Track file checksums before/after edits for regression detection."""
+
+    def __init__(self) -> None:
+        self._changes: dict[str, FileChange] = {}
+
+    def pre(self, path: str) -> None:
+        if path not in self._changes:
+            self._changes[path] = FileChange(path=path, before_sha=FileChange.sha(path))
+
+    def post(self, path: str) -> None:
+        if path in self._changes:
+            self._changes[path].record_after()
+
+    def summaries(self) -> list[str]:
+        return [c.summary() for c in self._changes.values() if c.changed]
+
+    def modified_paths(self) -> list[str]:
+        return [p for p, c in self._changes.items() if c.changed]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PARAM CLEANING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_PARAM_PREFIX_RE = re.compile(
+    r"^(?:path|file|filepath|directory|dir|command|cmd|query|pattern|content|input|args?)\s*[:=]\s*",
+    re.IGNORECASE,
 )
 
-SYSTEM_PROMPT = """You are Claw, an elite autonomous AI coding agent inside a secure isolated workspace.
-You are a Staff Full-Stack Engineer with deep mastery of HTML/CSS/JS, React, Vue, Tailwind, Python, Node.js, Flask, Express, SQL, and systems design.
 
-## HOW YOU WORK
-You work in an agentic loop: think → use a tool → observe the result → think → next tool → ... → final answer.
-You ALWAYS use tools to gather information before acting. You NEVER guess file contents — you read them first.
+def _clean_payload(payload: str) -> str:
+    """Strip LLM-generated parameter prefixes and wrapping from tool payloads."""
+    cleaned = payload.strip()
+    
+    # Strip hallucinated tags like [TOOL_CALL], [/TOOL_CALL], or any <tag>
+    cleaned = re.sub(r'\[/?\w+\]', '', cleaned).strip()
+    cleaned = re.sub(r'</?\w+>', '', cleaned).strip()
 
-## THINKING FORMAT
-Before each tool call, briefly wrap your reasoning in <thought>...</thought> (2-4 sentences max).
+    # If the entire payload is wrapped in backticks (e.g., `command`)
+    if cleaned.startswith("`") and cleaned.endswith("`"):
+        cleaned = cleaned.strip("`").strip()
+        
+    # Handle the case where the LLM writes: path ::: ```python\n ... \n```
+    if ":::" in cleaned:
+        parts = cleaned.split(":::", 1)
+        p1 = parts[0].strip()
+        p2 = parts[1].strip()
+        # Remove leftover backticks from p1 if the LLM wrote `path` ::: ...
+        p1 = p1.strip("`").strip()
+        
+        # Strip code blocks from p2
+        if p2.startswith("```"):
+            p2 = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", p2)
+            if p2.endswith("```"):
+                p2 = p2[:-3].strip()
+        return f"{p1} ::: {p2}"
 
-## TOOL CALL FORMAT  (follow EXACTLY — one tool per turn)
-After your thought:
-  TOOL: ToolName | payload
+    if cleaned.startswith("{"):
+        try:
+            data = json.loads(cleaned)
+            if isinstance(data, dict):
+                vals = list(data.values())
+                if len(vals) == 1:
+                    return str(vals[0]).strip()
+                if len(vals) == 2:
+                    return f"{vals[0]} ::: {vals[1]}"
+        except Exception:
+            pass
 
-FileEditTool uses triple-pipe separator:
-  TOOL: FileEditTool | path ||| <full file content>
+    return _PARAM_PREFIX_RE.sub("", cleaned).strip()
 
-## AVAILABLE TOOLS
-| Tool             | Payload format                     | Use when                              |
-|------------------|------------------------------------|---------------------------------------|
-| ListDirTool      | path (e.g. `.` or `src/`)          | Explore directory structure           |
-| FileReadTool     | filepath                           | Read a complete file                  |
-| ViewFileLinesTool| filepath ||| start,end             | Read a range of lines from large file |
-| SearchTool       | path ||| regex                     | Search for a pattern across files     |
-| FileEditTool     | filepath ||| <full file content>    | Create or overwrite a file            |
-| FileDeleteTool   | filepath                           | Delete a file or directory            |
-| BashTool         | shell command                      | Run npm, pip, node, python, etc.      |
 
-## WORKFLOW RULES
-1. ALWAYS scan with ListDirTool or FileReadTool BEFORE editing any existing file.
-2. Write COMPLETE files with FileEditTool — never emit partial snippets or diffs.
-3. After creating files, confirm what was built and what the user should see in the preview.
-4. Use BashTool for: installing packages, running tests, checking outputs.
-5. Build beautiful, modern, production-quality UIs by default: CSS variables, smooth transitions, dark theme.
-6. Self-contained HTML/CSS/JS in a single file unless the user specifies otherwise.
-7. NEVER ask the user for clarification — make smart decisions and act.
-8. Include error handling, loading states, and empty states in every interactive UI.
+# ═══════════════════════════════════════════════════════════════════════════════
+# TOOL DISPATCH
+# ═══════════════════════════════════════════════════════════════════════════════
 
-## STOPPING
-When you have no more tool calls to make, write your final answer WITHOUT any TOOL: line. This ends the loop.
-
-## QUALITY STANDARDS
-- HTML: Semantic, accessible, responsive (CSS Grid/Flexbox, CSS variables)
-- CSS: Mobile-first, modern aesthetics, consistent color palette
-- JavaScript: Vanilla ES6+; use React/Vue only when asked
-- Python: PEP8, type hints, clear function names
-- Always test edge cases and add defensive checks"""
+_KNOWN_TOOLS = {
+    "ListDirTool", "FileReadTool", "ViewFileLinesTool", "SearchTool",
+    "FileEditTool", "FilePatchTool", "FileDeleteTool", "BashTool", "ThinkTool",
+    "WorkspaceZipTool", "WorkspaceUnzipTool",
+}
 
 
 def _execute_tool(tool_name: str, payload: str) -> str:
-    """Dispatch tool call and return result string."""
-    payload = payload.strip()
+    """Dispatch a single tool call and return its output string."""
+    payload = _clean_payload(payload)
     try:
+        if tool_name == "ThinkTool":
+            return f"[Internal Reasoning]: {payload}"
+
         if tool_name == "ListDirTool":
             return tool_list_dir(payload or ".")
-        elif tool_name == "FileReadTool":
+
+        if tool_name == "FileReadTool":
             return tool_file_read(payload)
-        elif tool_name == "ViewFileLinesTool":
-            parts = payload.split("|||", 1)
+
+        if tool_name == "ViewFileLinesTool":
+            parts = payload.split(":::", 1)
             if len(parts) == 2:
-                path = parts[0].strip()
-                nums = parts[1].strip().split(",")
+                path  = parts[0].strip()
+                nums  = parts[1].strip().split(",")
                 start = int(nums[0].strip())
-                end = int(nums[1].strip()) if len(nums) > 1 else start + 50
+                end   = int(nums[1].strip()) if len(nums) > 1 else start + 50
                 return tool_view_file_lines(path, start, end)
             return tool_file_read(payload)
-        elif tool_name == "SearchTool":
-            parts = payload.split("|||", 1)
+
+        if tool_name == "SearchTool":
+            parts = payload.split(":::", 1)
             if len(parts) == 2:
                 return tool_search(parts[0].strip(), parts[1].strip())
             return tool_search(".", payload)
-        elif tool_name == "FileEditTool":
-            parts = payload.split("|||", 1)
+
+        if tool_name == "FileEditTool":
+            parts = payload.split(":::", 1)
             if len(parts) == 2:
                 return tool_file_edit(parts[0].strip(), parts[1])
-            return "Error: FileEditTool requires 'path ||| content' format."
-        elif tool_name == "FileDeleteTool":
+            return "Error: FileEditTool requires 'path ::: content'."
+
+        if tool_name == "FilePatchTool":
+            p1 = payload.split(":::", 1)
+            if len(p1) == 2:
+                path = p1[0].strip()
+                p2   = p1[1].split("===", 1)
+                if len(p2) == 2:
+                    return tool_file_patch(path, p2[0], p2[1])
+            return "Error: FilePatchTool expects 'path ::: old === new'."
+
+        if tool_name == "FileDeleteTool":
             return tool_file_delete(payload)
-        elif tool_name == "BashTool":
+
+        if tool_name == "BashTool":
             return tool_bash_run(payload)
-        else:
-            known = "ListDirTool, FileReadTool, ViewFileLinesTool, SearchTool, FileEditTool, FileDeleteTool, BashTool"
-            return f"Unknown tool: {tool_name}. Available: {known}"
-    except Exception as e:
-        return f"Tool error ({tool_name}): {str(e)}"
+
+        if tool_name == "WorkspaceZipTool":
+            return tool_workspace_zip(payload or "workspace_backup.zip")
+
+        if tool_name == "WorkspaceUnzipTool":
+            return tool_workspace_unzip(payload or "workspace_backup.zip")
+
+        return f"Unknown tool '{tool_name}'. Known: {', '.join(sorted(_KNOWN_TOOLS))}"
+
+    except Exception as exc:
+        return f"Tool error ({tool_name}): {exc}"
 
 
-def _parse_tool_call(text: str) -> tuple[str, str] | None:
-    """Find first TOOL: ... in LLM response. Returns (tool_name, payload) or None."""
-    match = re.search(r"TOOL:\s*(\w+)\s*\|+([\s\S]*)", text)
-    if not match:
-        return None
-    return match.group(1).strip(), match.group(2).strip()
+def _is_error(output: str) -> bool:
+    low = output.lower()
+    return (
+        low.startswith("error")
+        or low.startswith("tool error")
+        or "permission denied" in low
+        or "no such file" in low
+        or "command not found" in low
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PARSING HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_TOOL_RE = re.compile(
+    r"(?:TOOL:\s*)?(\w+)\s*[|:]+\s*([\s\S]*?)(?=\n(?:TOOL:\s*)?\w+\s*[|:]|\Z)",
+    re.MULTILINE,
+)
+
+
+def _parse_all_tool_calls(text: str) -> list[tuple[str, str]]:
+    """Extract ALL tool calls from an LLM response (multi-tool support)."""
+    calls = [
+        (m.group(1).strip(), m.group(2).strip())
+        for m in _TOOL_RE.finditer(text)
+        if m.group(1).strip() in _KNOWN_TOOLS
+    ]
+    
+    # Fallback: If no explicit tools are found, look for Markdown code blocks with filenames.
+    if not calls:
+        blocks = re.finditer(r"```[a-zA-Z0-9_-]*\n([\s\S]*?)```", text)
+        for b in blocks:
+            code = b.group(1)
+            # Try to pull a filename from the first line (e.g. // path/to/file.js or # main.py)
+            first_line = code.split("\n", 1)[0].strip()
+            name_match = re.match(r"^(?://|#|/\*|<!--)\s*([a-zA-Z0-9_\-\./\\]+\.[a-zA-Z0-9]+)", first_line)
+            if name_match:
+                filename = name_match.group(1)
+                # Remove the first line from the code
+                pure_code = code[len(first_line):].strip()
+                calls.append(("FileEditTool", f"{filename} ::: {pure_code}"))
+
+    return calls
+
+
+def _parse_first_tool_call(text: str) -> tuple[str, str] | None:
+    calls = _parse_all_tool_calls(text)
+    return calls[0] if calls else None
 
 
 def _strip_tool_lines(text: str) -> str:
-    """Remove TOOL: ... lines from display text."""
-    return re.sub(r"\nTOOL:[\s\S]*", "", text).strip()
+    return re.sub(r"\n?TOOL:[\s\S]*", "", text).strip()
 
 
-def _clean_response(text: str) -> str:
-    """Strip thought tags and tool lines from text for display."""
-    text = re.sub(r"<thought>[\s\S]*?</thought>", "", text, flags=re.IGNORECASE)
-    return _strip_tool_lines(text).strip()
+def _detect_done(text: str) -> bool:
+    return bool(re.search(r"\bDONE\s*:", text, re.IGNORECASE))
 
+
+def _extract_plan(text: str) -> str | None:
+    m = re.search(r"PLAN:\s*([\s\S]+?)(?=\nTOOL:|\Z)", text)
+    return m.group(1).strip() if m else None
+
+
+def _extract_thought(text: str) -> str | None:
+    m = re.search(r"<thought>([\s\S]*?)</thought>", text)
+    return m.group(1).strip() if m else None
+
+
+def _last_tool_used(messages: list[dict]) -> str | None:
+    """Scan backwards for the most recent tool-result tag in user messages."""
+    for m in reversed(messages):
+        if m["role"] == "user":
+            match = re.search(r"\[Tool Result — (\w+)\]", m["content"])
+            if match:
+                return match.group(1)
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONTEXT COMPRESSOR
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _compress_history(history: list[dict], llm: LLMClient) -> list[dict]:
+    """
+    Summarise older turns and keep the most recent pairs verbatim.
+    Keeps last 8 pairs intact; everything older becomes a bullet summary.
+    """
+    if len(history) < CONTEXT_COMPRESS_AT * 2:
+        return history
+
+    keep_items   = 8 * 2
+    old_items    = history[:-keep_items]
+    recent_items = history[-keep_items:]
+
+    old_text = "\n".join(
+        f"{m['role'].upper()}: {m['content'][:300]}" for m in old_items
+    )
+    try:
+        summary = ""
+        for chunk in llm.chat_stream(
+            [
+                {"role": "system", "content": "You are a concise technical summariser."},
+                {
+                    "role": "user",
+                    "content": (
+                        "Summarise this coding-agent conversation for context. "
+                        "Focus on: files modified, decisions made, bugs fixed, current task state.\n\n"
+                        f"{old_text}\n\nSummary (3–8 bullet points):"
+                    ),
+                },
+            ],
+            turn_type="thinking",
+        ):
+            summary += chunk
+        summary = summary.strip() or "Previous work completed."
+    except Exception:
+        summary = "Previous work completed (summary unavailable)."
+
+    return [
+        {"role": "user",      "content": "📋 COMPRESSED HISTORY SUMMARY:"},
+        {"role": "assistant", "content": summary},
+    ] + recent_items
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# WORKSPACE MAP
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _get_workspace_map() -> str:
+    _SKIP = {".git", "__pycache__", "node_modules", "venv", ".venv",
+             ".mypy_cache", ".ruff_cache", "dist", "build", ".next"}
+    try:
+        from .toolbox import get_workspace_root
+        root  = get_workspace_root()
+        lines: list[str] = []
+        for item in sorted(root.rglob("*")):
+            if any(p in item.parts for p in _SKIP):
+                continue
+            rel = item.relative_to(root)
+            if item.is_dir():
+                lines.append(f"📁 {rel}/")
+            else:
+                lines.append(f"📄 {rel} ({item.stat().st_size:,} bytes)")
+        return "\n".join(lines[:400])
+    except Exception:
+        return "Unable to map workspace."
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CLAW AGENT v2
+# ═══════════════════════════════════════════════════════════════════════════════
 
 class ClawAgent:
     """
-    Stateful agent — holds conversation history across user messages.
-    Supports single-model and smart multi-model routing modes.
+    Stateful autonomous coding agent — Plan → Execute → Verify → Done.
+
+    What's new in v2
+    ────────────────
+    • RollbackRegistry    — snapshot + public rollback_last_session()
+    • LoopDetector        — escape stuck repetitive cycles
+    • ChangeTracker       — SHA-256 file diff for regression detection
+    • ThinkTool support   — internal reasoning with zero side effects
+    • Auto-retry          — up to MAX_RETRIES with LLM-produced correction
+    • Context compression — LLM summarises old history when session grows large
+    • Task classifier     — classify_task() routes turn_type for model selection
+    • PLAN: extraction    — streams numbered plan as a dedicated UI event
+    • DONE: detection     — structured completion signal ends the loop cleanly
+    • Consecutive-error breaker — halts runaway failure cascades
+    • Smart turn routing  — adapts model tier based on last tool used
+    • _extract_plan / _detect_done  — cleaner helpers replacing inline regex
+    • file_diffs in done event — SHA summaries of every changed file
+    • Workspace map includes byte sizes
+
+    Streaming API
+    ─────────────
+    run_streaming(user_prompt) → Generator[dict, None, None]
+
+    SSE event schemas
+    ─────────────────
+    { type: "thinking",   text }
+    { type: "plan",       text }
+    { type: "live_text",  text }
+    { type: "token",      text }
+    { type: "tool_call",  tool, payload }
+    { type: "tool_result",tool, result, elapsed, success, attempt }
+    { type: "retry",      attempt, tool, error }
+    { type: "loop_warn",  text }
+    { type: "compressed", text }
+    { type: "done",       turns, files_changed, file_diffs, history_len,
+                          rollback_available }
+    { type: "error",      message }
+    { type: "key_error",  error_type, message }
+    { type: "stopped",    message, turns }
     """
 
-    def __init__(self, model: str = DEFAULT_MODEL):
-        self.model = model
-        self.history: list[dict[str, str]] = []
+    def __init__(self, model: str = DEFAULT_MODEL) -> None:
+        self.model       = model
+        self.history:    list[dict[str, str]] = []
         self.last_error: str = ""
-        self._stop_event: threading.Event = threading.Event()
+        self._stop_event = threading.Event()
+        self._last_rollback: RollbackRegistry | None = None
 
-    def clear_history(self):
-        self.history = []
+    # ── public controls ───────────────────────────────────────────────────────
 
-    def request_stop(self):
+    def clear_history(self) -> None:
+        self.history.clear()
+
+    def request_stop(self) -> None:
         self._stop_event.set()
 
-    def clear_stop(self):
+    def clear_stop(self) -> None:
         self._stop_event.clear()
 
-    def _build_messages(self, user_prompt: str) -> list[dict[str, str]]:
-        msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
-        for item in self.history[-20:]:
-            msgs.append(item)
-        msgs.append({"role": "user", "content": user_prompt})
-        return msgs
+    def rollback_last_session(self) -> list[str]:
+        """Undo all file changes from the most recent run_streaming call."""
+        if self._last_rollback is None:
+            return ["No session to roll back."]
+        return self._last_rollback.rollback_all()
+
+    # ── internal helpers ──────────────────────────────────────────────────────
 
     def _is_smart(self) -> bool:
         return self.model.startswith("smart:")
 
-    def run_streaming(self, user_prompt: str) -> Generator[dict, None, None]:
+    def _build_messages(self, user_prompt: str) -> list[dict]:
+        prompt = SYSTEM_PROMPT
+        try:
+            from .toolbox import get_workspace_root
+            root = get_workspace_root()
+
+            mem = root / ".memory.md"
+            if mem.exists() and mem.stat().st_size > 0:
+                prompt += (
+                    "\n\n## SHORT-TERM MEMORY (.memory.md)\n"
+                    f"<memory>\n{mem.read_text(encoding='utf-8')[-3_000:]}\n</memory>"
+                )
+
+            prompt += f"\n\n## WORKSPACE MAP\n<workspace>\n{_get_workspace_map()}\n</workspace>"
+
+            atlas = root / ".atlas.md"
+            if atlas.exists() and atlas.stat().st_size > 0:
+                prompt += (
+                    "\n\n## PROJECT ATLAS (.atlas.md)\n"
+                    f"<atlas>\n{atlas.read_text(encoding='utf-8')[-4_000:]}\n</atlas>"
+                )
+        except Exception:
+            pass
+
+        msgs: list[dict] = [{"role": "system", "content": prompt}]
+        for item in self.history[-(MAX_HISTORY_PAIRS * 2):]:
+            msgs.append({
+                "role":    item["role"],
+                "content": item.get("content", "").strip() or "(empty)",
+            })
+        msgs.append({"role": "user", "content": user_prompt.strip() or "(empty)"})
+        return msgs
+
+    def _snapshot_if_write(
+        self, tool_name: str, payload: str, registry: RollbackRegistry
+    ) -> None:
+        if tool_name in {"FileEditTool", "FilePatchTool", "FileDeleteTool"}:
+            path = payload.split(":::", 1)[0].strip()
+            if path:
+                registry.snapshot(path)
+
+    def _pretrack(self, tool_name: str, payload: str, tracker: ChangeTracker) -> None:
+        if tool_name in {"FileEditTool", "FilePatchTool"}:
+            path = payload.split(":::", 1)[0].strip()
+            if path:
+                tracker.pre(path)
+
+    def _posttrack(self, tool_name: str, payload: str, tracker: ChangeTracker) -> None:
+        if tool_name in {"FileEditTool", "FilePatchTool"}:
+            path = payload.split(":::", 1)[0].strip()
+            if path:
+                tracker.post(path)
+
+    def _resolve_turn_type(
+        self, turn: int, messages: list[dict], task_class: str
+    ) -> str:
+        if turn == 0:
+            return "thinking"
+        last_tool = _last_tool_used(messages)
+        if last_tool in {"ListDirTool", "FileReadTool", "ViewFileLinesTool", "SearchTool"}:
+            return "coding"
+        if last_tool == "BashTool":
+            return "default"
+        return task_class
+
+    # ── main streaming loop ───────────────────────────────────────────────────
+
+    def run_streaming(self, user_prompt: str) -> Generator[dict, None, None]:  # noqa: C901
         """
-        Generator that yields SSE event dicts.
-        Types: thinking | tool_call | tool_result | token | done | error | key_error | stopped
+        Yield SSE event dicts describing every step of the agentic loop.
+        See class docstring for the full event schema reference.
         """
         self.clear_stop()
-        llm = LLMClient(model=self.model)
-        messages = self._build_messages(user_prompt)
 
-        full_assistant_content: list[str] = []
-        total_turns = 0
-        files_changed: list[str] = []
+        llm        = LLMClient(model=self.model)
+        messages   = self._build_messages(user_prompt)
+        registry   = RollbackRegistry()
+        tracker    = ChangeTracker()
+        loop_guard = LoopDetector(window=LOOP_DETECT_WINDOW)
+        task_class = classify_task(user_prompt)
+        self._last_rollback = registry
 
-        # Emit smart routing info as a hint
+        full_content:      list[str] = []
+        consecutive_errors: int      = 0
+        total_turns:        int      = 0
+
         if self._is_smart():
             info = SMART_MODELS.get(self.model, {})
-            yield {"type": "thinking", "text": f"Smart routing: {info.get('description', self.model)}"}
+            yield {
+                "type": "thinking",
+                "text": f"Smart routing active — {info.get('description', self.model)}",
+            }
 
+        # ── turn loop ─────────────────────────────────────────────────────────
         for turn in range(MAX_AGENT_TURNS):
             if self._stop_event.is_set():
-                yield {"type": "stopped", "message": "Agent stopped by user.", "turns": total_turns}
+                yield {"type": "stopped", "message": "Agent stopped by user.",
+                       "turns": total_turns}
+                break
+
+            # Consecutive-error cascade breaker
+            if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                yield {
+                    "type":    "error",
+                    "message": f"Halted: {consecutive_errors} consecutive errors.",
+                }
                 break
 
             total_turns = turn + 1
+            turn_type   = self._resolve_turn_type(turn, messages, task_class)
 
-            # Determine turn type for smart routing
-            # First turn is always planning (thinking), subsequent depend on context
-            if turn == 0:
-                turn_type = "thinking"
-            else:
-                # Peek at last tool used to predict next turn type
-                last_tool = None
-                for m in reversed(messages):
-                    if m["role"] == "user" and m["content"].startswith("[Tool Result"):
-                        last_tool = re.search(r"\[Tool Result — (\w+)\]", m["content"])
-                        if last_tool:
-                            last_tool = last_tool.group(1)
-                        break
-                if last_tool in {"ListDirTool", "FileReadTool", "ViewFileLinesTool", "SearchTool"}:
-                    turn_type = "coding"
-                elif last_tool in {"FileEditTool", "BashTool"}:
-                    turn_type = "default"
-                else:
-                    turn_type = "default"
-
-            active_label = self.model
+            # Emit per-turn label
             if self._is_smart():
-                concrete = llm.route(turn_type)
-                info = get_all_models().get(concrete, {})
+                concrete     = llm.route(turn_type)
+                info         = get_all_models().get(concrete, {})
                 active_label = info.get("label", concrete)
                 yield {
                     "type": "thinking",
-                    "text": f"Using {info.get('emoji','')}{active_label} ({info.get('short','')}) for this step"
+                    "text": f"{info.get('emoji', '')} {active_label} · turn {turn + 1}",
                 }
             else:
-                yield {"type": "thinking", "text": f"Thinking (turn {turn + 1})..."}
+                yield {"type": "thinking",
+                       "text": f"Turn {turn + 1} / {MAX_AGENT_TURNS}…"}
 
-            response_text = llm.chat(messages, turn_type=turn_type)
+            # ── stream LLM response ───────────────────────────────────────────
+            response_text = ""
+            try:
+                for chunk in llm.chat_stream(messages, turn_type=turn_type):
+                    if self._stop_event.is_set():
+                        break
+                    response_text += chunk
+                    if not response_text.startswith("CLAW_ERROR:"):
+                        yield {"type": "live_text",
+                               "text": re.sub(r"\n?TOOL:[\s\S]*", "", response_text)}
+            except Exception as exc:
+                yield {"type": "error", "message": f"LLM stream error: {exc}"}
+                break
 
             if not response_text:
-                yield {"type": "error", "message": "Empty response from LLM. Please try again."}
+                yield {"type": "error", "message": "Empty LLM response."}
                 break
 
-            # Handle structured error codes from LLM client
             if response_text.startswith("CLAW_ERROR:"):
                 parts = response_text.split("|", 1)
-                meta = parts[0].replace("CLAW_ERROR:", "")
-                msg = parts[1] if len(parts) > 1 else response_text
-                yield {"type": "key_error", "error_type": meta.strip(), "message": msg}
+                yield {
+                    "type":       "key_error",
+                    "error_type": parts[0].replace("CLAW_ERROR:", "").strip(),
+                    "message":    parts[1] if len(parts) > 1 else response_text,
+                }
                 break
 
-            # Parse thinking block
-            thought_match = re.search(r"<thought>([\s\S]*?)</thought>", response_text, re.IGNORECASE)
-            if thought_match:
-                thought_text = thought_match.group(1).strip()
-                if thought_text:
-                    yield {"type": "thinking", "text": thought_text}
+            # ── thought extraction ────────────────────────────────────────────
+            thought = _extract_thought(response_text)
+            if thought:
+                yield {"type": "thought", "text": thought}
 
-            # Check for tool call
-            tool_call = _parse_tool_call(response_text)
+            # ── PLAN extraction (turn 0 only) ─────────────────────────────────
+            if turn == 0:
+                plan = _extract_plan(response_text)
+                if plan:
+                    yield {"type": "plan", "text": plan}
 
-            if tool_call:
-                tool_name, payload = tool_call
+            # ── emit clean prose ──────────────────────────────────────────────
+            clean_prose = _strip_tool_lines(response_text)
+            clean_prose = re.sub(r"PLAN:[\s\S]+?(?=\n\n|\Z)", "", clean_prose)
+            clean_prose = re.sub(r"<thought>[\s\S]*?</thought>", "", clean_prose).strip()
+            if clean_prose:
+                yield {"type": "token", "text": clean_prose}
 
-                # Emit clean prose before the tool call
-                clean = _clean_response(response_text).strip()
-                if clean:
-                    yield {"type": "token", "text": clean}
+            # ── completion check ──────────────────────────────────────────────
+            if _detect_done(response_text) and not _parse_first_tool_call(response_text):
+                full_content.append(response_text)
+                break
 
-                yield {"type": "tool_call", "tool": tool_name, "payload": payload[:300]}
+            # ── parse tool calls ──────────────────────────────────────────────
+            tool_calls = _parse_all_tool_calls(response_text)
+            if not tool_calls:
+                full_content.append(response_text)
+                break
 
+            tool_name, payload = tool_calls[0]
+            payload = _clean_payload(payload)
+
+            # Loop detection (full payload hash for accuracy)
+            phash = hashlib.md5(payload.encode()).hexdigest()[:12]
+            loop_guard.record(tool_name, phash)
+            if loop_guard.is_looping():
+                hint = loop_guard.hint()
+                yield {"type": "loop_warn", "text": hint}
+                messages.append({"role": "user", "content": f"[System Warning] {hint}"})
+                consecutive_errors += 1
+                continue
+
+            # Pre-snapshot + pre-track
+            self._snapshot_if_write(tool_name, payload, registry)
+            self._pretrack(tool_name, payload, tracker)
+
+            yield {"type": "tool_call", "tool": tool_name, "payload": payload[:400]}
+
+            # ── auto-retry with LLM correction ────────────────────────────────
+            result  = ""
+            elapsed = 0.0
+            attempt = 1
+
+            for attempt in range(1, MAX_RETRIES + 1):
                 if self._stop_event.is_set():
-                    yield {"type": "stopped", "message": "Agent stopped by user.", "turns": total_turns}
                     break
-
-                # Execute the tool
                 t_start = time.time()
-                result = _execute_tool(tool_name, payload)
+                result  = _execute_tool(tool_name, payload)
                 elapsed = round(time.time() - t_start, 2)
 
-                # Track files changed by the agent
-                if tool_name == "FileEditTool":
-                    fe_parts = payload.split("|||", 1)
-                    if fe_parts:
-                        fname = fe_parts[0].strip()
-                        if fname and fname not in files_changed:
-                            files_changed.append(fname)
+                if not _is_error(result) or attempt == MAX_RETRIES:
+                    break
 
                 yield {
-                    "type": "tool_result",
-                    "tool": tool_name,
-                    "result": result[:2000],
-                    "elapsed": elapsed,
+                    "type":    "retry",
+                    "attempt": attempt,
+                    "tool":    tool_name,
+                    "error":   result[:300],
                 }
 
+                # Ask LLM to produce a corrected tool call
                 messages.append({"role": "assistant", "content": response_text})
                 messages.append({
-                    "role": "user",
-                    "content": f"[Tool Result — {tool_name}]\n{result}"
+                    "role":    "user",
+                    "content": (
+                        f"[Tool Error — {tool_name} attempt {attempt}]\n"
+                        f"{result}\nFix the error and retry with a corrected tool call."
+                    ),
                 })
-                full_assistant_content.append(response_text)
-                full_assistant_content.append(f"[Tool: {tool_name}] → {result[:400]}")
+                fix_resp = ""
+                try:
+                    for chunk in llm.chat_stream(messages, turn_type=turn_type):
+                        fix_resp += chunk
+                except Exception:
+                    break
+                new_call = _parse_first_tool_call(fix_resp)
+                if new_call:
+                    tool_name, payload = new_call
+                    self._snapshot_if_write(tool_name, payload, registry)
+                    self._pretrack(tool_name, payload, tracker)
+                    yield {"type": "tool_call", "tool": tool_name, "payload": payload[:400]}
 
+            # Post-track after write completes
+            self._posttrack(tool_name, payload, tracker)
+
+            yield {
+                "type":    "tool_result",
+                "tool":    tool_name,
+                "result":  result[:RESULT_TRIM_CHARS],
+                "elapsed": elapsed,
+                "success": not _is_error(result),
+                "attempt": attempt,
+            }
+
+            # Error accounting
+            if _is_error(result):
+                consecutive_errors += 1
             else:
-                # No tool call → this is the final response
-                clean_final = _clean_response(response_text)
-                if clean_final:
-                    yield {"type": "token", "text": clean_final}
-                full_assistant_content.append(response_text)
-                break
+                consecutive_errors = max(0, consecutive_errors - 1)
 
-        # Persist conversation history
-        combined_assistant = "\n\n".join(full_assistant_content)
-        self.history.append({"role": "user", "content": user_prompt})
-        self.history.append({"role": "assistant", "content": combined_assistant[:6000]})
-        if len(self.history) > 30:
-            self.history = self.history[-30:]
+            # Append to messages
+            messages.append({"role": "assistant", "content": response_text.strip() or "(empty)"})
+            messages.append({
+                "role":    "user",
+                "content": f"[Tool Result — {tool_name}]\n{result}",
+            })
+            full_content.append(response_text)
+            full_content.append(f"[{tool_name}] → {result[:400]}")
+
+            # Queue any additional tool calls from the same response
+            if len(tool_calls) > 1:
+                pending = "\n".join(f"TOOL: {n} | {p}" for n, p in tool_calls[1:])
+                messages.append({
+                    "role":    "user",
+                    "content": f"[Pending tool calls — execute these next]\n{pending}",
+                })
+
+            # Context compression for long sessions
+            if len(messages) > CONTEXT_COMPRESS_AT * 2 + 4:
+                sys_msg  = messages[0]
+                rest     = _compress_history(messages[1:], llm)
+                messages = [sys_msg] + rest
+                yield {"type": "compressed", "text": "Context compressed to save tokens."}
+
+        # ── persist conversation history ──────────────────────────────────────
+        combined = "\n\n".join(full_content)
+        self.history.append({"role": "user",      "content": user_prompt})
+        self.history.append({"role": "assistant",  "content": combined[:8_000]})
+        if len(self.history) > MAX_HISTORY_PAIRS * 2:
+            self.history = self.history[-(MAX_HISTORY_PAIRS * 2):]
 
         if not self._stop_event.is_set():
             yield {
-                "type": "done",
-                "turns": total_turns,
-                "files_changed": files_changed,
-                "history_len": len(self.history) // 2,
+                "type":               "done",
+                "turns":              total_turns,
+                "files_changed":      tracker.modified_paths(),
+                "file_diffs":         tracker.summaries(),
+                "history_len":        len(self.history) // 2,
+                "rollback_available": registry.has_snapshots,
             }

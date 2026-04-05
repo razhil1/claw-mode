@@ -1,317 +1,2052 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-layout="default">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Claw IDE — AI Coding Agent</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-theme">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/style.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NEXUS IDE — Autonomous Agent Workspace</title>
+
+    <!-- ── Fonts ── -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap"
+        rel="stylesheet" />
+
+    <!-- ── Icons ── -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+
+    <!-- ── Highlight.js ── -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css"
+        id="hljs-theme" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+
+    <!-- ── CodeMirror 6 via CDN ── -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"
+        defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"
+        defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/shell/shell.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/markdown/markdown.min.js"
+        defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"
+        defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"
+        defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/foldcode.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/search/searchcursor.min.js"
+        defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/scroll/simplescrollbars.min.js" defer></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/scroll/simplescrollbars.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js" defer></script>
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css" />
+
+    <!-- ── Marked (Markdown) ── -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+
+    <!-- ── Xterm.js (Terminal) ── -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm/5.3.0/xterm.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xterm-addon-fit/0.8.0/xterm-addon-fit.min.js" defer></script>
+
+    <!-- ── App Styles ── -->
+    <link rel="stylesheet" href="/static/css/nexus.css" />
+    <link rel="stylesheet" href="/static/css/components.css" />
+    <link rel="stylesheet" href="/static/css/animations.css" />
+    <link rel="stylesheet" href="/static/css/extended.css" />
 </head>
-<body>
 
-<!-- ==================== SIDEBAR ==================== -->
-<div class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-        <div class="logo-row">
-            <span class="logo-icon">⚡</span>
-            <span class="logo-text">Claw IDE</span>
-            <div class="logo-actions">
-                <button onclick="toggleTheme()" title="Toggle theme" id="themeBtn"><i class="fa-solid fa-moon"></i></button>
-                <button onclick="showSettings()" title="API Key Settings"><i class="fa-solid fa-gear"></i></button>
-                <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar"><i class="fa-solid fa-bars"></i></button>
+<body class="nexus-root">
+
+    <!-- ═══════════════════════════════════════════════════
+     COMMAND PALETTE  (⌘K)
+══════════════════════════════════════════════════════ -->
+    <div class="command-palette-overlay" id="cmdPaletteOverlay" onclick="hideCommandPalette()">
+        <div class="command-palette" id="cmdPalette" onclick="event.stopPropagation()">
+            <div class="cmd-search-row">
+                <i class="fa-solid fa-terminal cmd-icon"></i>
+                <input type="text" id="cmdInput" placeholder="Type a command or search files…"
+                    oninput="filterCommands(this.value)" onkeydown="cmdKeyNav(event)" autocomplete="off" />
+                <kbd>ESC</kbd>
+            </div>
+            <div class="cmd-results" id="cmdResults">
+                <!-- populated by JS -->
+            </div>
+            <div class="cmd-footer">
+                <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+                <span><kbd>↵</kbd> Select</span>
+                <span><kbd>ESC</kbd> Dismiss</span>
             </div>
         </div>
-        <div class="status-row">
-            <span class="badge-green"><i class="fa-solid fa-circle"></i> Agent Online</span>
-            <span class="badge-gray" id="turnCounter">0 turns</span>
-        </div>
     </div>
 
-    <!-- New Session -->
-    <div class="sidebar-section">
-        <button class="btn-primary w100" onclick="newSession()">
-            <i class="fa-solid fa-plus"></i> New Session
-        </button>
-    </div>
+    <!-- ═══════════════════════════════════════════════════
+     NOTIFICATION TOAST CONTAINER
+══════════════════════════════════════════════════════ -->
+    <div class="toast-stack" id="toastStack"></div>
 
-    <!-- Model Selector -->
-    <div class="sidebar-section model-section">
-        <div class="section-label">
-            <span><i class="fa-solid fa-microchip"></i> Model</span>
-        </div>
-        <select id="modelSelect" onchange="switchModel(this.value)" class="styled-select"></select>
-        <div class="model-card" id="modelCard">
-            <div class="model-card-top">
-                <span class="model-role-badge" id="modelRoleBadge"></span>
-                <span class="model-price" id="modelPrice"></span>
-            </div>
-            <div class="model-desc" id="modelDesc"></div>
-            <div class="model-ctx" id="modelCtx"></div>
-        </div>
-    </div>
+    <!-- ═══════════════════════════════════════════════════
+     TOP MENU BAR
+══════════════════════════════════════════════════════ -->
+    <header class="top-bar" id="topBar">
+        <div class="top-bar-left">
+            <button class="tb-logo" onclick="toggleActivity()" title="Toggle Activity Bar">
+                <span class="logo-glyph">⬡</span>
+                <span class="logo-wordmark">NEXUS<span class="logo-accent">IDE</span></span>
+            </button>
 
-    <!-- Quick Actions -->
-    <div class="sidebar-section">
-        <div class="section-label"><i class="fa-solid fa-bolt"></i> Quick Start</div>
-        <div class="quick-actions">
-            <button onclick="quickPrompt('Build a stunning modern landing page with hero, animated features section, testimonials, and footer using dark glassmorphism design')">🌐 Landing Page</button>
-            <button onclick="quickPrompt('Create a real-time todo app with local storage, drag-to-reorder, priorities, tags, and smooth animations')">✅ Todo App</button>
-            <button onclick="quickPrompt('Build a beautiful calculator with scientific mode, keyboard support, history log, and smooth animations')">🧮 Calculator</button>
-            <button onclick="quickPrompt('Create an interactive portfolio website with animated hero, projects grid, skills section, and contact form')">🎨 Portfolio</button>
-            <button onclick="quickPrompt('Build a markdown editor with live split-pane preview, toolbar with formatting buttons, and export feature')">📝 MD Editor</button>
-            <button onclick="quickPrompt('Create a kanban board with drag-and-drop columns, cards with priorities, and local storage persistence')">📋 Kanban Board</button>
-            <button onclick="quickPrompt('Build a REST API with Flask: /users, /auth (JWT), and full CRUD with proper error handling')">🔌 Flask API</button>
-            <button onclick="quickPrompt('Create a music player UI with playlist, progress bar, animated visualizer, and controls')">🎵 Music Player</button>
-        </div>
-    </div>
-
-    <!-- File Explorer -->
-    <div class="sidebar-section file-section">
-        <div class="section-label">
-            <span><i class="fa-solid fa-folder-tree"></i> Files</span>
-            <div class="fe-actions">
-                <button onclick="showNewFileDialog()" title="New file"><i class="fa-solid fa-file-plus"></i></button>
-                <button onclick="triggerUpload()" title="Upload files"><i class="fa-solid fa-upload"></i></button>
-                <button onclick="loadFiles()" title="Refresh"><i class="fa-solid fa-arrows-rotate"></i></button>
-            </div>
-        </div>
-        <div class="fe-search-wrap">
-            <input type="text" class="fe-search" id="fileSearch" placeholder="Search files..." oninput="filterFiles(this.value)">
-        </div>
-        <div class="fe-list" id="fileList" ondragover="onFileDragOver(event)" ondragleave="onFileDragLeave(event)" ondrop="onFileDrop(event)">
-            <div class="fe-empty">Workspace is empty</div>
-        </div>
-        <div class="fe-drop-hint" id="feDropHint"><i class="fa-solid fa-cloud-arrow-up"></i> Drop files to upload</div>
-    </div>
-
-    <!-- Stats -->
-    <div class="sidebar-footer">
-        <div class="stat-row">
-            <span><i class="fa-solid fa-message"></i> <span id="historyCount">0</span> msgs</span>
-            <span><i class="fa-solid fa-file-code"></i> <span id="fileCount">0</span> files</span>
-        </div>
-        <div class="version-row">Claw IDE v3.2 · <span id="activeProvider">NVIDIA</span></div>
-    </div>
-</div>
-
-<!-- Hidden file upload input -->
-<input type="file" id="uploadInput" multiple style="display:none" onchange="handleFileUpload(this.files)">
-
-<!-- ==================== MAIN ==================== -->
-<div class="main-wrapper">
-
-    <!-- Chat Pane -->
-    <div class="chat-section" id="chatSection">
-        <div class="chat-header">
-            <div class="chat-header-left">
-                <i class="fa-solid fa-robot"></i>
-                <span>AI Agent</span>
-                <div class="agent-status" id="agentStatus">
-                    <span class="status-dot green"></span> Ready
+            <nav class="tb-menu" id="tbMenu">
+                <div class="tb-menu-item" data-menu="file">
+                    File
+                    <div class="tb-dropdown">
+                        <div onclick="newSession()"><i class="fa-solid fa-plus"></i> New Session <kbd>⌘N</kbd></div>
+                        <div onclick="showNewFileDialog()"><i class="fa-solid fa-file-plus"></i> New File <kbd>⌘T</kbd>
+                        </div>
+                        <div onclick="showOpenFolderDialog()"><i class="fa-solid fa-folder-open"></i> Open Folder…</div>
+                        <div onclick="triggerUpload()"><i class="fa-solid fa-file-arrow-up"></i> Upload Files…</div>
+                        <div class="tb-sep"></div>
+                        <div onclick="saveCurrentFile()"><i class="fa-solid fa-floppy-disk"></i> Save <kbd>⌘S</kbd>
+                        </div>
+                        <div onclick="saveAllFiles()"><i class="fa-solid fa-floppy-disks"></i> Save All <kbd>⌘⇧S</kbd>
+                        </div>
+                        <div class="tb-sep"></div>
+                        <div onclick="downloadWorkspace()"><i class="fa-solid fa-file-zipper"></i> Export ZIP</div>
+                        <div onclick="triggerImport()"><i class="fa-solid fa-file-import"></i> Import ZIP</div>
+                    </div>
                 </div>
+                <div class="tb-menu-item" data-menu="edit">
+                    Edit
+                    <div class="tb-dropdown">
+                        <div onclick="editorUndo()"><i class="fa-solid fa-rotate-left"></i> Undo <kbd>⌘Z</kbd></div>
+                        <div onclick="editorRedo()"><i class="fa-solid fa-rotate-right"></i> Redo <kbd>⌘⇧Z</kbd></div>
+                        <div class="tb-sep"></div>
+                        <div onclick="showFindReplace()"><i class="fa-solid fa-magnifying-glass"></i> Find &amp; Replace
+                            <kbd>⌘F</kbd></div>
+                        <div onclick="showGlobalSearch()"><i class="fa-solid fa-search"></i> Global Search
+                            <kbd>⌘⇧F</kbd></div>
+                        <div class="tb-sep"></div>
+                        <div onclick="formatDocument()"><i class="fa-solid fa-align-left"></i> Format Document
+                            <kbd>⌥⇧F</kbd></div>
+                        <div onclick="toggleComment()"><i class="fa-solid fa-comment-slash"></i> Toggle Comment
+                            <kbd>⌘/</kbd></div>
+                    </div>
+                </div>
+                <div class="tb-menu-item" data-menu="view">
+                    View
+                    <div class="tb-dropdown">
+                        <div onclick="togglePanel('explorer')"><i class="fa-solid fa-folder-tree"></i> Explorer
+                            <kbd>⌘⇧E</kbd></div>
+                        <div onclick="togglePanel('search')"><i class="fa-solid fa-magnifying-glass"></i> Search
+                            <kbd>⌘⇧F</kbd></div>
+                        <div onclick="togglePanel('git')"><i class="fa-brands fa-git-alt"></i> Source Control</div>
+                        <div onclick="togglePanel('debug')"><i class="fa-solid fa-bug"></i> Debugger</div>
+                        <div onclick="togglePanel('extensions')"><i class="fa-solid fa-puzzle-piece"></i> Extensions
+                        </div>
+                        <div class="tb-sep"></div>
+                        <div onclick="switchRightTab('terminal')"><i class="fa-solid fa-terminal"></i> Terminal
+                            <kbd>⌘`</kbd></div>
+                        <div onclick="switchRightTab('preview')"><i class="fa-solid fa-globe"></i> Preview</div>
+                        <div class="tb-sep"></div>
+                        <div onclick="toggleLayout('zen')"><i class="fa-solid fa-expand"></i> Zen Mode <kbd>⌘K Z</kbd>
+                        </div>
+                        <div onclick="toggleLayout('split')"><i class="fa-solid fa-table-columns"></i> Split Editor
+                        </div>
+                    </div>
+                </div>
+                <div class="tb-menu-item" data-menu="agent">
+                    Agent
+                    <div class="tb-dropdown">
+                        <div onclick="showAgentConfig()"><i class="fa-solid fa-sliders"></i> Configure Agent</div>
+                        <div onclick="showModelSelector()"><i class="fa-solid fa-microchip"></i> Switch Model</div>
+                        <div onclick="toggleUltraMode()"><i class="fa-solid fa-bolt"></i> Toggle Ultra Mode</div>
+                        <div onclick="toggleSwarmMode()"><i class="fa-solid fa-bee"></i> Toggle Swarm Mode</div>
+                        <div class="tb-sep"></div>
+                        <div onclick="showMemory()"><i class="fa-solid fa-brain"></i> View Memory</div>
+                        <div onclick="showToolLog()"><i class="fa-solid fa-list-check"></i> Tool Execution Log</div>
+                        <div onclick="showTokenStats()"><i class="fa-solid fa-chart-bar"></i> Token &amp; Cost Stats
+                        </div>
+                        <div class="tb-sep"></div>
+                        <div onclick="stopAgent()" class="menu-danger"><i class="fa-solid fa-stop"></i> Stop Agent</div>
+                    </div>
+                </div>
+                <div class="tb-menu-item" data-menu="run">
+                    Run
+                    <div class="tb-dropdown">
+                        <div onclick="runProject()"><i class="fa-solid fa-play"></i> Run Project <kbd>F5</kbd></div>
+                        <div onclick="runCurrentFile()"><i class="fa-solid fa-play-circle"></i> Run File <kbd>⌘F5</kbd>
+                        </div>
+                        <div onclick="debugProject()"><i class="fa-solid fa-bug-slash"></i> Start Debugging
+                            <kbd>F9</kbd></div>
+                        <div class="tb-sep"></div>
+                        <div onclick="showRunConfig()"><i class="fa-solid fa-gear"></i> Run Configurations</div>
+                        <div onclick="showEnvManager()"><i class="fa-solid fa-flask"></i> Environment Variables</div>
+                        <div onclick="showDockerPanel()"><i class="fa-brands fa-docker"></i> Docker / Container</div>
+                    </div>
+                </div>
+                <div class="tb-menu-item" data-menu="deploy">
+                    Deploy
+                    <div class="tb-dropdown">
+                        <div onclick="showDeployPanel()"><i class="fa-solid fa-rocket"></i> Deploy to Cloud</div>
+                        <div onclick="showGitPanel()"><i class="fa-brands fa-github"></i> Push to GitHub</div>
+                        <div onclick="showNetlifyDeploy()"><i class="fa-solid fa-globe"></i> Deploy to Netlify</div>
+                        <div onclick="showVercelDeploy()"><i class="fa-solid fa-triangle"></i> Deploy to Vercel</div>
+                    </div>
+                </div>
+                <div class="tb-menu-item" data-menu="help">
+                    Help
+                    <div class="tb-dropdown">
+                        <div onclick="showKeyboardShortcuts()"><i class="fa-solid fa-keyboard"></i> Keyboard Shortcuts
+                            <kbd>⌘K ⌘S</kbd></div>
+                        <div onclick="showGuide()"><i class="fa-solid fa-book-open"></i> Getting Started</div>
+                        <div onclick="showApiDocs()"><i class="fa-solid fa-code"></i> API Reference</div>
+                        <div class="tb-sep"></div>
+                        <div onclick="showAbout()"><i class="fa-solid fa-circle-info"></i> About NEXUS IDE</div>
+                    </div>
+                </div>
+            </nav>
+        </div>
+
+        <div class="top-bar-center">
+            <button class="cmd-trigger" onclick="showCommandPalette()" title="Command Palette (⌘K)">
+                <i class="fa-solid fa-terminal"></i>
+                <span>Search commands, files…</span>
+                <kbd>⌘K</kbd>
+            </button>
+        </div>
+
+        <div class="top-bar-right">
+            <div class="tb-agent-badge" id="tbAgentBadge">
+                <span class="agent-dot" id="agentDot"></span>
+                <span id="agentStatusText">Agent Ready</span>
             </div>
-            <div class="chat-header-right">
-                <button class="icon-btn stop-btn" id="stopBtn" onclick="stopAgent()" title="Stop agent" style="display:none">
-                    <i class="fa-solid fa-stop"></i> Stop
+
+            <div class="tb-model-pill" onclick="showModelSelector()" title="Current Model">
+                <i class="fa-solid fa-microchip"></i>
+                <span id="activeModelPill">Loading…</span>
+                <i class="fa-solid fa-chevron-down tb-chevron"></i>
+            </div>
+
+            <!-- Token Counter -->
+            <div class="tb-token-counter" id="tbTokenCounter" title="Token Usage">
+                <i class="fa-solid fa-coins"></i>
+                <span id="tokenDisplay">0 / 128k</span>
+            </div>
+
+            <!-- Terminal Toggle -->
+            <button class="tb-icon-btn" onclick="toggleRightPanel()" id="termToggleBtn" title="Toggle Terminal/Splits">
+                <i class="fa-solid fa-terminal"></i>
+            </button>
+
+            <!-- Theme Toggle -->
+            <button class="tb-icon-btn" onclick="toggleTheme()" id="themeToggleBtn" title="Toggle Theme">
+                <i class="fa-solid fa-moon"></i>
+            </button>
+
+            <!-- Layout Toggle -->
+            <button class="tb-icon-btn" onclick="cycleLayout()" title="Cycle Layout">
+                <i class="fa-solid fa-layout"></i>
+            </button>
+
+            <!-- Settings -->
+            <button class="tb-icon-btn" onclick="showSettings()" title="Settings">
+                <i class="fa-solid fa-gear"></i>
+            </button>
+
+            <!-- Profile -->
+            <button class="tb-avatar" onclick="showProfileMenu()" title="Account">
+                <span id="avatarInitial">N</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════
+     ROOT LAYOUT GRID
+══════════════════════════════════════════════════════ -->
+    <div class="nexus-layout" id="nexusLayout">
+
+        <!-- ── ACTIVITY BAR (far left icon strip) ── -->
+        <aside class="activity-bar" id="activityBar">
+            <div class="ab-top">
+                <button class="ab-btn active" data-panel="explorer" onclick="togglePanel('explorer')"
+                    title="Explorer (⌘⇧E)">
+                    <i class="fa-solid fa-folder-tree"></i>
+                    <span class="ab-badge" id="ab-badge-explorer"></span>
                 </button>
-                <button class="icon-btn" onclick="exportChat()" title="Export chat"><i class="fa-solid fa-download"></i></button>
-                <button class="icon-btn" onclick="clearChat()" title="Clear messages"><i class="fa-solid fa-trash"></i></button>
-                <button class="icon-btn" onclick="showSettings()" title="API Key Settings"><i class="fa-solid fa-gear"></i></button>
+                <button class="ab-btn" data-panel="search" onclick="togglePanel('search')" title="Search (⌘⇧F)">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+                <button class="ab-btn" data-panel="git" onclick="togglePanel('git')" title="Source Control">
+                    <i class="fa-brands fa-git-alt"></i>
+                    <span class="ab-badge" id="ab-badge-git"></span>
+                </button>
+                <button class="ab-btn" data-panel="agents" onclick="togglePanel('agents')" title="Agents">
+                    <i class="fa-solid fa-robot"></i>
+                    <span class="ab-badge live" id="ab-badge-agents">1</span>
+                </button>
+                <button class="ab-btn" data-panel="debug" onclick="togglePanel('debug')" title="Run &amp; Debug (F5)">
+                    <i class="fa-solid fa-bug"></i>
+                </button>
+                <button class="ab-btn" data-panel="database" onclick="togglePanel('database')"
+                    title="Database Explorer">
+                    <i class="fa-solid fa-database"></i>
+                </button>
+                <button class="ab-btn" data-panel="api" onclick="togglePanel('api')" title="API Tester">
+                    <i class="fa-solid fa-plug"></i>
+                </button>
+                <button class="ab-btn" data-panel="docker" onclick="togglePanel('docker')" title="Docker">
+                    <i class="fa-brands fa-docker"></i>
+                </button>
+                <button class="ab-btn" data-panel="extensions" onclick="togglePanel('extensions')" title="Extensions">
+                    <i class="fa-solid fa-puzzle-piece"></i>
+                </button>
             </div>
-        </div>
+            <div class="ab-bottom">
+                <button class="ab-btn" onclick="showNotifications()" title="Notifications" id="notifBtn">
+                    <i class="fa-solid fa-bell"></i>
+                    <span class="ab-badge pulse" id="notifBadge" style="display:none">3</span>
+                </button>
+                <button class="ab-btn" onclick="showSettings()" title="Settings">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+                <button class="ab-btn" onclick="showProfileMenu()" title="Account">
+                    <i class="fa-solid fa-circle-user"></i>
+                </button>
+            </div>
+        </aside>
 
-        <div class="chat-container" id="chat">
-            <div class="welcome-card">
-                <div class="welcome-icon">⚡</div>
-                <h2>Claw IDE — AI Coding Agent</h2>
-                <p>I'm your autonomous coding agent. I can build entire applications, debug code, run commands, and manage files — all inside a secure sandbox.</p>
-                <div class="welcome-tips">
-                    <span>🧠 Multi-step reasoning</span>
-                    <span>🔧 Real tool execution</span>
-                    <span>💾 Session memory</span>
-                    <span>⚡ Live preview</span>
+        <!-- ── SIDE PANEL (collapsible, changes content per activity) ── -->
+        <aside class="side-panel" id="sidePanel">
+
+            <!-- ======= EXPLORER PANEL ======= -->
+            <div class="sp-section active" id="panel-explorer">
+                <div class="sp-header">
+                    <span class="sp-title">Explorer</span>
+                    <div class="sp-header-actions">
+                        <button onclick="showNewFileDialog()" title="New File"><i
+                                class="fa-solid fa-file-plus"></i></button>
+                        <button onclick="showNewFolderDialog()" title="New Folder"><i
+                                class="fa-solid fa-folder-plus"></i></button>
+                        <button onclick="loadFiles()" title="Refresh"><i class="fa-solid fa-rotate"></i></button>
+                        <button onclick="collapseAllFolders()" title="Collapse All"><i
+                                class="fa-solid fa-compress"></i></button>
+                        <button onclick="togglePanel('explorer')" title="Close"><i
+                                class="fa-solid fa-xmark"></i></button>
+                    </div>
                 </div>
-                <div class="welcome-key-hint" id="welcomeKeyHint" style="display:none">
-                    <i class="fa-solid fa-triangle-exclamation"></i>
-                    No NVIDIA API key configured. <button onclick="showSettings()">Add a key →</button>
+
+                <!-- Workspace Info -->
+                <div class="workspace-info-bar" id="workspaceInfoBar">
+                    <i class="fa-solid fa-box-archive"></i>
+                    <span id="workspaceName">agent_workspace</span>
+                    <span class="ws-file-count" id="wsFileCount">0 files</span>
+                </div>
+
+                <!-- File Search -->
+                <div class="fe-search-row">
+                    <i class="fa-solid fa-magnifying-glass fe-search-icon"></i>
+                    <input type="text" class="fe-search-input" id="fileSearch" placeholder="Filter files…"
+                        oninput="filterFiles(this.value)" />
+                </div>
+
+                <!-- File Tree -->
+                <div class="file-tree" id="fileTree" ondragover="onFileDragOver(event)"
+                    ondragleave="onFileDragLeave(event)" ondrop="onFileDrop(event)">
+                    <div class="fe-empty-state" id="feEmptyState">
+                        <i class="fa-solid fa-folder-open"></i>
+                        <p>Workspace is empty</p>
+                        <button onclick="showNewFileDialog()">Create first file</button>
+                    </div>
+                </div>
+
+                <!-- Drop Hint -->
+                <div class="fe-drop-overlay" id="feDropOverlay">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span>Drop files to upload</span>
+                </div>
+
+                <!-- Workspace Actions -->
+                <div class="fe-footer">
+                    <button class="fe-footer-btn" onclick="showOpenFolderDialog()" title="Open Folder">
+                        <i class="fa-solid fa-folder-open"></i> Open
+                    </button>
+                    <button class="fe-footer-btn" onclick="downloadWorkspace()" title="Export as ZIP">
+                        <i class="fa-solid fa-download"></i> Export
+                    </button>
+                    <button class="fe-footer-btn" onclick="triggerImport()" title="Import ZIP">
+                        <i class="fa-solid fa-upload"></i> Import
+                    </button>
+                    <button class="fe-footer-btn" onclick="triggerUpload()" title="Upload Files">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> Upload
+                    </button>
+                </div>
+            </div>
+
+            <!-- ======= SEARCH PANEL ======= -->
+            <div class="sp-section" id="panel-search">
+                <div class="sp-header">
+                    <span class="sp-title">Global Search</span>
+                    <button onclick="togglePanel('search')" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="search-panel-body">
+                    <div class="gs-input-wrap">
+                        <input type="text" id="globalSearchInput" placeholder="Search across all files…"
+                            oninput="globalSearch(this.value)" />
+                        <button class="gs-btn" title="Match Case" onclick="toggleSearchCase()" id="gsCase">Aa</button>
+                        <button class="gs-btn" title="Whole Word" onclick="toggleSearchWord()" id="gsWord">W</button>
+                        <button class="gs-btn" title="Regex" onclick="toggleSearchRegex()" id="gsRegex">.*</button>
+                    </div>
+                    <div class="gs-replace-wrap">
+                        <input type="text" id="globalReplaceInput" placeholder="Replace…" />
+                        <button class="gs-replace-btn" onclick="replaceAll()"><i class="fa-solid fa-right-left"></i>
+                            Replace All</button>
+                    </div>
+                    <div class="gs-filters">
+                        <input type="text" placeholder="Include: e.g. *.js" id="gsInclude" />
+                        <input type="text" placeholder="Exclude: e.g. node_modules" id="gsExclude" />
+                    </div>
+                    <div class="gs-results" id="gsResults">
+                        <div class="gs-hint">Type to search across workspace files</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======= GIT / SOURCE CONTROL PANEL ======= -->
+            <div class="sp-section" id="panel-git">
+                <div class="sp-header">
+                    <span class="sp-title">Source Control</span>
+                    <div class="sp-header-actions">
+                        <button onclick="gitRefresh()" title="Refresh"><i class="fa-solid fa-rotate"></i></button>
+                        <button onclick="showGitConfig()" title="Git Config"><i class="fa-solid fa-gear"></i></button>
+                        <button onclick="togglePanel('git')" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                <div class="git-panel-body">
+                    <!-- Commit Section -->
+                    <div class="git-commit-area">
+                        <textarea id="gitCommitMsg" placeholder="Commit message (⌘Enter to commit)…"
+                            rows="3"></textarea>
+                        <div class="git-commit-actions">
+                            <button class="git-btn-commit" onclick="gitCommit()"><i class="fa-solid fa-check"></i>
+                                Commit</button>
+                            <button class="git-btn-sync" onclick="gitSync()"><i class="fa-solid fa-arrows-rotate"></i>
+                                Sync</button>
+                        </div>
+                    </div>
+                    <!-- Branch Bar -->
+                    <div class="git-branch-bar">
+                        <i class="fa-solid fa-code-branch"></i>
+                        <select id="gitBranchSelect" onchange="switchBranch(this.value)">
+                            <option>main</option>
+                        </select>
+                        <button onclick="createBranch()" title="New Branch"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <!-- Changes List -->
+                    <div class="git-section-label">Changes <span id="gitChangesCount" class="git-count">0</span></div>
+                    <div class="git-changes-list" id="gitChangesList">
+                        <div class="git-empty">No changes detected</div>
+                    </div>
+                    <!-- Staged -->
+                    <div class="git-section-label">Staged <span id="gitStagedCount" class="git-count">0</span></div>
+                    <div class="git-staged-list" id="gitStagedList">
+                        <div class="git-empty">Nothing staged</div>
+                    </div>
+                    <!-- Commit History -->
+                    <div class="git-section-label">Recent Commits</div>
+                    <div class="git-history-list" id="gitHistoryList">
+                        <div class="git-empty">No commits yet</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======= AGENTS PANEL ======= -->
+            <div class="sp-section" id="panel-agents">
+                <div class="sp-header">
+                    <span class="sp-title">Agent Control</span>
+                    <div class="sp-header-actions">
+                        <button onclick="spawnAgent()" title="New Agent"><i class="fa-solid fa-plus"></i></button>
+                        <button onclick="togglePanel('agents')" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                <div class="agents-panel-body">
+
+                    <!-- Active Agent Card -->
+                    <div class="agent-card active-agent" id="mainAgentCard">
+                        <div class="agent-card-header">
+                            <span class="agent-avatar">🤖</span>
+                            <div class="agent-card-info">
+                                <div class="agent-card-name">Primary Agent</div>
+                                <div class="agent-card-model" id="agentCardModel">Loading…</div>
+                            </div>
+                            <span class="agent-status-pill" id="agentStatusPill">Ready</span>
+                        </div>
+                        <div class="agent-card-stats">
+                            <div class="astat"><span id="astat-turns">0</span><label>Turns</label></div>
+                            <div class="astat"><span id="astat-tokens">0</span><label>Tokens</label></div>
+                            <div class="astat"><span id="astat-tools">0</span><label>Tool Calls</label></div>
+                            <div class="astat"><span id="astat-cost">$0.00</span><label>Cost</label></div>
+                        </div>
+                        <div class="agent-card-controls">
+                            <button onclick="pauseAgent()" id="pauseAgentBtn" title="Pause Agent"><i
+                                    class="fa-solid fa-pause"></i> Pause</button>
+                            <button onclick="stopAgent()" class="danger-btn" title="Stop Agent"><i
+                                    class="fa-solid fa-stop"></i> Stop</button>
+                            <button onclick="resetAgent()" title="Reset Context"><i class="fa-solid fa-rotate-left"></i>
+                                Reset</button>
+                        </div>
+                    </div>
+
+                    <!-- Agent Mode -->
+                    <div class="agent-mode-section">
+                        <div class="sp-sub-label">Execution Mode</div>
+                        <div class="mode-pills">
+                            <button class="mode-pill active" onclick="setAgentMode('auto')" data-mode="auto">
+                                <i class="fa-solid fa-bolt"></i> Auto
+                            </button>
+                            <button class="mode-pill" onclick="setAgentMode('step')" data-mode="step">
+                                <i class="fa-solid fa-forward-step"></i> Step
+                            </button>
+                            <button class="mode-pill" onclick="setAgentMode('manual')" data-mode="manual">
+                                <i class="fa-solid fa-hand"></i> Manual
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Tools Config -->
+                    <div class="agent-tools-section">
+                        <div class="sp-sub-label">Available Tools</div>
+                        <div class="tools-list" id="agentToolsList">
+                            <label class="tool-toggle"><input type="checkbox" checked
+                                    onchange="toggleTool('file_read', this.checked)"> <i
+                                    class="fa-solid fa-file-lines"></i> ReadFile</label>
+                            <label class="tool-toggle"><input type="checkbox" checked
+                                    onchange="toggleTool('file_write', this.checked)"> <i
+                                    class="fa-solid fa-file-pen"></i> WriteFile</label>
+                            <label class="tool-toggle"><input type="checkbox" checked
+                                    onchange="toggleTool('file_patch', this.checked)"> <i
+                                    class="fa-solid fa-scissors"></i> PatchFile</label>
+                            <label class="tool-toggle"><input type="checkbox" checked
+                                    onchange="toggleTool('bash', this.checked)"> <i class="fa-solid fa-terminal"></i>
+                                BashExec</label>
+                            <label class="tool-toggle"><input type="checkbox" checked
+                                    onchange="toggleTool('web_search', this.checked)"> <i class="fa-solid fa-globe"></i>
+                                WebSearch</label>
+                            <label class="tool-toggle"><input type="checkbox" checked
+                                    onchange="toggleTool('web_fetch', this.checked)"> <i
+                                    class="fa-solid fa-cloud-arrow-down"></i> WebFetch</label>
+                            <label class="tool-toggle"><input type="checkbox" checked
+                                    onchange="toggleTool('npm', this.checked)"> <i class="fa-brands fa-npm"></i>
+                                PackageManager</label>
+                            <label class="tool-toggle"><input type="checkbox"
+                                    onchange="toggleTool('image_gen', this.checked)"> <i class="fa-solid fa-image"></i>
+                                ImageGen</label>
+                            <label class="tool-toggle"><input type="checkbox"
+                                    onchange="toggleTool('db_query', this.checked)"> <i
+                                    class="fa-solid fa-database"></i> DBQuery</label>
+                            <label class="tool-toggle"><input type="checkbox"
+                                    onchange="toggleTool('git_ops', this.checked)"> <i class="fa-brands fa-git-alt"></i>
+                                GitOps</label>
+                        </div>
+                    </div>
+
+                    <!-- Constraints -->
+                    <div class="agent-constraints-section">
+                        <div class="sp-sub-label">Safety &amp; Constraints</div>
+                        <div class="constraint-list">
+                            <label class="constraint-toggle">
+                                <input type="checkbox" checked id="cst-confirm-delete"
+                                    onchange="setConstraint('confirm_delete', this.checked)">
+                                Confirm before delete
+                            </label>
+                            <label class="constraint-toggle">
+                                <input type="checkbox" checked id="cst-confirm-run"
+                                    onchange="setConstraint('confirm_run', this.checked)">
+                                Confirm before bash exec
+                            </label>
+                            <label class="constraint-toggle">
+                                <input type="checkbox" id="cst-sandbox"
+                                    onchange="setConstraint('sandbox_only', this.checked)">
+                                Sandbox mode (no network)
+                            </label>
+                            <label class="constraint-toggle">
+                                <input type="checkbox" checked id="cst-auto-save"
+                                    onchange="setConstraint('auto_save', this.checked)">
+                                Auto-save on agent write
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Memory Summary -->
+                    <div class="agent-memory-section">
+                        <div class="sp-sub-label">
+                            Context Memory
+                            <button class="sp-inline-btn" onclick="showMemory()">View All</button>
+                            <button class="sp-inline-btn danger" onclick="clearMemory()">Clear</button>
+                        </div>
+                        <div class="memory-summary" id="memorySummary">No memories yet.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======= DEBUG PANEL ======= -->
+            <div class="sp-section" id="panel-debug">
+                <div class="sp-header">
+                    <span class="sp-title">Run &amp; Debug</span>
+                    <button onclick="togglePanel('debug')" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="debug-panel-body">
+                    <div class="debug-controls">
+                        <button class="dbg-btn run" onclick="debugProject()" title="Start Debugging (F5)"><i
+                                class="fa-solid fa-play"></i></button>
+                        <button class="dbg-btn step" onclick="debugStepOver()" title="Step Over (F10)"><i
+                                class="fa-solid fa-forward-step"></i></button>
+                        <button class="dbg-btn step" onclick="debugStepInto()" title="Step Into (F11)"><i
+                                class="fa-solid fa-chevron-down"></i></button>
+                        <button class="dbg-btn step" onclick="debugStepOut()" title="Step Out (⇧F11)"><i
+                                class="fa-solid fa-chevron-up"></i></button>
+                        <button class="dbg-btn stop" onclick="stopDebug()" title="Stop (⇧F5)"><i
+                                class="fa-solid fa-stop"></i></button>
+                    </div>
+                    <div class="sp-sub-label">Breakpoints</div>
+                    <div class="breakpoints-list" id="breakpointsList">
+                        <div class="debug-empty">No breakpoints set</div>
+                    </div>
+                    <div class="sp-sub-label">Variables</div>
+                    <div class="variables-list" id="variablesList">
+                        <div class="debug-empty">Not debugging</div>
+                    </div>
+                    <div class="sp-sub-label">Watch</div>
+                    <div class="watch-list" id="watchList">
+                        <div class="debug-empty">Nothing watching</div>
+                    </div>
+                    <div class="debug-add-watch">
+                        <input type="text" id="watchInput" placeholder="Add expression…" />
+                        <button onclick="addWatch()"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                    <div class="sp-sub-label">Call Stack</div>
+                    <div class="callstack-list" id="callstackList">
+                        <div class="debug-empty">No call stack</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======= DATABASE PANEL ======= -->
+            <div class="sp-section" id="panel-database">
+                <div class="sp-header">
+                    <span class="sp-title">Database Explorer</span>
+                    <div class="sp-header-actions">
+                        <button onclick="addDbConnection()" title="New Connection"><i
+                                class="fa-solid fa-plus"></i></button>
+                        <button onclick="togglePanel('database')" title="Close"><i
+                                class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                <div class="db-panel-body">
+                    <div class="db-connections" id="dbConnections">
+                        <div class="db-empty">No connections. <button onclick="addDbConnection()">Add one</button></div>
+                    </div>
+                    <div class="db-query-section">
+                        <div class="sp-sub-label">Quick Query</div>
+                        <textarea id="dbQueryInput" class="db-query-input" placeholder="SELECT * FROM …"
+                            rows="4"></textarea>
+                        <button class="db-run-btn" onclick="runDbQuery()"><i class="fa-solid fa-play"></i> Run
+                            Query</button>
+                    </div>
+                    <div class="db-results" id="dbResults"></div>
+                </div>
+            </div>
+
+            <!-- ======= API TESTER PANEL ======= -->
+            <div class="sp-section" id="panel-api">
+                <div class="sp-header">
+                    <span class="sp-title">API Tester</span>
+                    <button onclick="togglePanel('api')" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="api-panel-body">
+                    <div class="api-method-row">
+                        <select id="apiMethod" class="api-method-select">
+                            <option>GET</option>
+                            <option>POST</option>
+                            <option>PUT</option>
+                            <option>PATCH</option>
+                            <option>DELETE</option>
+                            <option>OPTIONS</option>
+                        </select>
+                        <input type="text" id="apiUrl" class="api-url-input"
+                            placeholder="https://api.example.com/endpoint" />
+                        <button class="api-send-btn" onclick="sendApiRequest()"><i
+                                class="fa-solid fa-paper-plane"></i></button>
+                    </div>
+                    <div class="api-tabs">
+                        <button class="api-tab active" onclick="switchApiTab('headers')">Headers</button>
+                        <button class="api-tab" onclick="switchApiTab('body')">Body</button>
+                        <button class="api-tab" onclick="switchApiTab('auth')">Auth</button>
+                        <button class="api-tab" onclick="switchApiTab('params')">Params</button>
+                    </div>
+                    <div class="api-tab-content" id="apiTabContent">
+                        <div class="api-headers" id="apiHeadersList">
+                            <div class="api-header-row">
+                                <input type="text" placeholder="Key" /><input type="text" placeholder="Value" />
+                                <button onclick="removeApiHeader(this)"><i class="fa-solid fa-xmark"></i></button>
+                            </div>
+                        </div>
+                        <button class="api-add-btn" onclick="addApiHeader()"><i class="fa-solid fa-plus"></i> Add
+                            Header</button>
+                    </div>
+                    <div class="api-response" id="apiResponse">
+                        <div class="api-response-empty">Response will appear here</div>
+                    </div>
+                    <div class="api-saved-requests">
+                        <div class="sp-sub-label">Saved Requests</div>
+                        <div class="api-saved-list" id="apiSavedList">
+                            <div class="api-empty">No saved requests</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======= DOCKER PANEL ======= -->
+            <div class="sp-section" id="panel-docker">
+                <div class="sp-header">
+                    <span class="sp-title">Docker / Containers</span>
+                    <button onclick="togglePanel('docker')" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="docker-panel-body">
+                    <div class="docker-status-bar">
+                        <span class="docker-daemon" id="dockerDaemon"><i class="fa-solid fa-circle"></i> Daemon:
+                            Checking…</span>
+                        <button onclick="refreshDocker()" title="Refresh"><i class="fa-solid fa-rotate"></i></button>
+                    </div>
+                    <div class="sp-sub-label">Images</div>
+                    <div class="docker-images" id="dockerImages">
+                        <div class="docker-empty">No images found</div>
+                    </div>
+                    <div class="sp-sub-label">Containers</div>
+                    <div class="docker-containers" id="dockerContainers">
+                        <div class="docker-empty">No containers found</div>
+                    </div>
+                    <div class="docker-actions">
+                        <button onclick="dockerBuild()"><i class="fa-solid fa-hammer"></i> Build Image</button>
+                        <button onclick="dockerCompose()"><i class="fa-solid fa-play"></i> Compose Up</button>
+                        <button onclick="dockerPrune()"><i class="fa-solid fa-broom"></i> Prune</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======= EXTENSIONS PANEL ======= -->
+            <div class="sp-section" id="panel-extensions">
+                <div class="sp-header">
+                    <span class="sp-title">Extensions</span>
+                    <button onclick="togglePanel('extensions')" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="ext-panel-body">
+                    <div class="ext-search-row">
+                        <input type="text" id="extSearchInput" placeholder="Search extensions…"
+                            oninput="searchExtensions(this.value)" />
+                    </div>
+                    <div class="ext-tabs">
+                        <button class="ext-tab active" onclick="switchExtTab('installed')">Installed</button>
+                        <button class="ext-tab" onclick="switchExtTab('recommended')">Recommended</button>
+                        <button class="ext-tab" onclick="switchExtTab('popular')">Popular</button>
+                    </div>
+                    <div class="ext-list" id="extList">
+                        <!-- populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+        </aside><!-- /side-panel -->
+
+        <!-- ── PANEL RESIZE HANDLE (side-panel ↔ main editor) ── -->
+        <div class="resize-handle-v" id="resizeHandleV" title="Drag to resize"></div>
+
+        <!-- ═══════════════════════════════════════════════════
+       MAIN AREA  (editor + tabs + chat)
+  ══════════════════════════════════════════════════════ -->
+        <div class="main-area" id="mainArea">
+
+            <!-- ── EDITOR REGION ── -->
+            <div class="editor-region" id="editorRegion">
+
+                <!-- ── TAB BAR ── -->
+                <div class="editor-tab-bar" id="editorTabBar">
+                    <div class="tabs-scroll" id="tabsScroll">
+                        <!-- tabs populated by JS -->
+                        <div class="tab-placeholder">No files open</div>
+                    </div>
+                    <div class="tab-bar-actions">
+                        <button onclick="splitEditorHorizontal()" title="Split Right"><i
+                                class="fa-solid fa-table-columns"></i></button>
+                        <button onclick="splitEditorVertical()" title="Split Down"><i
+                                class="fa-solid fa-table-rows"></i></button>
+                        <button onclick="closeAllTabs()" title="Close All Tabs"><i
+                                class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+
+                <!-- ── BREADCRUMB BAR ── -->
+                <div class="breadcrumb-bar" id="breadcrumbBar">
+                    <span class="breadcrumb-item">workspace</span>
+                    <i class="fa-solid fa-chevron-right breadcrumb-sep"></i>
+                    <span class="breadcrumb-item active" id="breadcrumbFile">No file open</span>
+                </div>
+
+                <!-- ── EDITOR SPLIT WRAPPER (supports 2 panes) ── -->
+                <div class="editor-split-wrap" id="editorSplitWrap">
+
+                    <!-- Primary Editor Pane -->
+                    <div class="editor-pane" id="editorPaneLeft">
+                        <div class="codemirror-wrap" id="cmWrapLeft">
+                            <!-- CodeMirror mounts here -->
+                            <div class="editor-no-file" id="editorNoFile">
+                                <div class="no-file-icon">⬡</div>
+                                <h3>NEXUS IDE</h3>
+                                <p>Open a file from the Explorer or let the agent create one</p>
+                                <div class="no-file-actions">
+                                    <button onclick="showNewFileDialog()"><i class="fa-solid fa-file-plus"></i> New
+                                        File</button>
+                                    <button onclick="triggerUpload()"><i class="fa-solid fa-cloud-arrow-up"></i> Upload
+                                        Files</button>
+                                    <button onclick="showCommandPalette()"><i class="fa-solid fa-terminal"></i> Command
+                                        Palette</button>
+                                </div>
+                                <div class="shortcut-hints">
+                                    <span><kbd>⌘K</kbd> Command Palette</span>
+                                    <span><kbd>⌘N</kbd> New Session</span>
+                                    <span><kbd>⌘⇧F</kbd> Global Search</span>
+                                    <span><kbd>F5</kbd> Run Project</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Find & Replace Bar -->
+                        <div class="find-replace-bar" id="findReplaceBar" style="display:none">
+                            <div class="fr-row">
+                                <input type="text" id="frFind" placeholder="Find…" oninput="findInEditor(this.value)" />
+                                <span class="fr-count" id="frCount">0/0</span>
+                                <button onclick="frPrev()" title="Previous"><i
+                                        class="fa-solid fa-chevron-up"></i></button>
+                                <button onclick="frNext()" title="Next"><i
+                                        class="fa-solid fa-chevron-down"></i></button>
+                                <button onclick="toggleFindReplace()" title="Toggle Replace"><i
+                                        class="fa-solid fa-right-left"></i></button>
+                                <button onclick="hideFindReplace()" title="Close"><i
+                                        class="fa-solid fa-xmark"></i></button>
+                            </div>
+                            <div class="fr-row replace-row" id="frReplaceRow" style="display:none">
+                                <input type="text" id="frReplace" placeholder="Replace…" />
+                                <button onclick="frReplaceOne()">Replace</button>
+                                <button onclick="frReplaceAll()">Replace All</button>
+                            </div>
+                        </div>
+
+                        <!-- Editor Status Bar (per pane) -->
+                        <div class="editor-pane-status" id="editorPaneStatus">
+                            <span id="cursorPos">Ln 1, Col 1</span>
+                            <span id="selectionInfo"></span>
+                            <span class="eol-type">LF</span>
+                            <span id="fileEncoding">UTF-8</span>
+                            <span id="fileLangId">Plain Text</span>
+                            <button class="format-btn-mini" onclick="formatDocument()" title="Format"><i
+                                    class="fa-solid fa-align-left"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Split Resize Handle -->
+                    <div class="split-resize-handle" id="splitResizeHandle" style="display:none"></div>
+
+                    <!-- Secondary Editor Pane (split) -->
+                    <div class="editor-pane" id="editorPaneRight" style="display:none">
+                        <div class="codemirror-wrap" id="cmWrapRight"></div>
+                    </div>
+
+                </div><!-- /editor-split-wrap -->
+            </div><!-- /editor-region -->
+
+            <!-- ── HORIZONTAL RESIZE HANDLE (editor ↔ chat) ── -->
+            <div class="resize-handle-h" id="resizeHandleH" title="Drag to resize"></div>
+
+            <!-- ── CHAT REGION ── -->
+            <div class="chat-region" id="chatRegion">
+
+                <!-- Chat Header -->
+                <div class="chat-region-header">
+                    <div class="crh-left">
+                        <i class="fa-solid fa-robot crh-icon"></i>
+                        <span class="crh-title">AI Agent</span>
+                        <div class="crh-status" id="crhStatus">
+                            <span class="crh-dot green" id="crhDot"></span>
+                            <span id="crhStatusText">Ready</span>
+                        </div>
+
+                        <!-- Ultra Mode indicator -->
+                        <div class="ultra-badge" id="ultraBadge" style="display:none">
+                            <i class="fa-solid fa-bolt"></i> ULTRA
+                        </div>
+
+                        <!-- Swarm Mode indicator -->
+                        <div class="swarm-badge" id="swarmBadge" style="display:none">
+                            <i class="fa-solid fa-bee"></i> SWARM
+                        </div>
+                    </div>
+                    <div class="crh-right">
+                        <button class="crh-btn stop-btn" id="stopBtn" onclick="stopAgent()" title="Stop Agent"
+                            style="display:none">
+                            <i class="fa-solid fa-stop"></i> Stop
+                        </button>
+                        <button class="crh-btn" onclick="showMemory()" title="Memory"><i
+                                class="fa-solid fa-brain"></i></button>
+                        <button class="crh-btn" onclick="showToolLog()" title="Tool Log"><i
+                                class="fa-solid fa-list-check"></i></button>
+                        <button class="crh-btn" onclick="showTokenStats()" title="Tokens &amp; Cost"><i
+                                class="fa-solid fa-coins"></i></button>
+                        <button class="crh-btn" onclick="exportChat()" title="Export Chat"><i
+                                class="fa-solid fa-download"></i></button>
+                        <button class="crh-btn" onclick="clearChat()" title="Clear Chat"><i
+                                class="fa-solid fa-trash"></i></button>
+                        <!-- Expand chat toggle -->
+                        <button class="crh-btn" onclick="toggleChatExpand()" id="chatExpandBtn"
+                            title="Expand/Collapse Chat">
+                            <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Messages Area -->
+                <div class="chat-messages" id="chatMessages">
+                    <!-- Welcome Card -->
+                    <div class="welcome-card" id="welcomeCard">
+                        <div class="wc-glyph">⬡</div>
+                        <button class="wc-dismiss" onclick="document.getElementById('welcomeCard').remove()" title="Go to IDE">&times;</button>
+                        <h2>NEXUS <span class="wc-accent">IDE</span></h2>
+                        <p class="wc-sub">Autonomous AI development environment. Ready for your next command.</p>
+                        <div class="wc-capabilities">
+                            <div class="wc-cap"><i class="fa-solid fa-brain"></i><span>Multi-step reasoning</span></div>
+                            <div class="wc-cap"><i class="fa-solid fa-wrench"></i><span>Real tool execution</span></div>
+                            <div class="wc-cap"><i class="fa-solid fa-layer-group"></i><span>Full-stack
+                                    generation</span></div>
+                            <div class="wc-cap"><i class="fa-solid fa-shield-halved"></i><span>Constrained safety</span>
+                            </div>
+                            <div class="wc-cap"><i class="fa-solid fa-arrows-rotate"></i><span>Git &amp; deploy</span>
+                            </div>
+                            <div class="wc-cap"><i class="fa-solid fa-database"></i><span>DB + API testing</span></div>
+                        </div>
+                        <div class="wc-key-warning" id="wcKeyWarning" style="display:none">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            No API key configured. 
+                            <div class="wc-key-actions">
+                                <button onclick="showSettings()">Configure now →</button>
+                                <button onclick="dismissKeyWarning()" class="btn-dismiss">&times;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step / Progress Bar -->
+                <div class="agent-step-bar" id="agentStepBar" style="display:none">
+                    <div class="step-bar-body">
+                        <div class="step-spinner"></div>
+                        <div class="step-info">
+                            <span class="step-phase" id="stepPhase">Thinking</span>
+                            <span class="step-label" id="stepLabel">Agent is working…</span>
+                        </div>
+                        <div class="step-tool-badge" id="stepToolBadge" style="display:none">
+                            <i class="fa-solid fa-wrench"></i>
+                            <span id="stepToolName"></span>
+                        </div>
+                    </div>
+                    <div class="step-progress-track">
+                        <div class="step-progress-fill" id="stepProgressFill"></div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="chat-input-area" id="chatInputArea">
+                    <!-- Quick Prompt Chips -->
+                    <div class="quick-chips" id="quickChips">
+                        <button
+                            onclick="quickPrompt('Build a stunning full-stack Next.js app with authentication, database, and deployment config')">🚀
+                            Full-Stack App</button>
+                        <button
+                            onclick="quickPrompt('Create a real-time dashboard with live charts, metrics, and WebSocket support')">📊
+                            Live Dashboard</button>
+                        <button
+                            onclick="quickPrompt('Build a REST API with authentication, rate limiting, CRUD, and auto-generated docs')">🔌
+                            REST API</button>
+                        <button
+                            onclick="quickPrompt('Create a React component library with Storybook, tests, and npm publish config')">🧩
+                            Component Lib</button>
+                        <button
+                            onclick="quickPrompt('Build a CLI tool in Python with subcommands, config files, and rich output')">⚙️
+                            CLI Tool</button>
+                        <button
+                            onclick="quickPrompt('Create a DevOps pipeline: Docker, GitHub Actions CI/CD, and Kubernetes manifests')">🐳
+                            DevOps Pipeline</button>
+                        <button
+                            onclick="quickPrompt('Debug and fix all issues in the current workspace, add tests and error handling')">🔍
+                            Debug Workspace</button>
+                        <button
+                            onclick="quickPrompt('Generate comprehensive documentation, README, and API reference for this project')">📚
+                            Generate Docs</button>
+                    </div>
+
+                    <!-- Attachment Preview Bar (shows when files attached) -->
+                    <div class="attachment-bar" id="attachmentBar" style="display:none">
+                        <div class="attachment-list" id="attachmentList"></div>
+                        <button onclick="clearAttachments()" class="clear-attach-btn"><i
+                                class="fa-solid fa-xmark"></i></button>
+                    </div>
+
+                    <!-- Main Input Box -->
+                    <div class="input-box-wrap" id="inputBoxWrap">
+                        <div class="input-toolrow">
+                            <button class="input-tool-btn" onclick="attachFiles()" title="Attach Files">
+                                <i class="fa-solid fa-paperclip"></i>
+                            </button>
+                            <button class="input-tool-btn" onclick="insertCodeSnippet()" title="Insert Code Snippet">
+                                <i class="fa-solid fa-code"></i>
+                            </button>
+                            <button class="input-tool-btn" onclick="insertFileRef()" title="Reference a File">
+                                <i class="fa-solid fa-at"></i>
+                            </button>
+                            <button class="input-tool-btn" onclick="insertImageRef()" title="Reference an Image">
+                                <i class="fa-regular fa-image"></i>
+                            </button>
+                            <div class="input-divider-v"></div>
+                            <!-- Ultra Mode Toggle inside input -->
+                            <label class="ultra-toggle-mini" title="Ultra Mode">
+                                <input type="checkbox" id="ultraToggle" onchange="toggleUltraMode()" />
+                                <span class="ultra-toggle-slider"></span>
+                                <span class="ultra-toggle-label">Ultra</span>
+                            </label>
+                            <!-- Swarm Mode Toggle inside input -->
+                            <label class="swarm-toggle-mini" title="Swarm Mode">
+                                <input type="checkbox" id="swarmToggle" onchange="toggleSwarmMode()" />
+                                <span class="swarm-toggle-slider"></span>
+                                <span class="swarm-toggle-label">Swarm</span>
+                            </label>
+                        </div>
+
+                        <textarea id="chatPrompt" class="chat-textarea"
+                            placeholder="Describe what to build, ask a question, or say '@filename' to reference a file… (↵ send · ⇧↵ newline · ⌘K commands)"
+                            rows="1" oninput="onPromptInput(this)" onkeydown="onPromptKeyDown(event)"></textarea>
+
+                        <div class="input-footer-row">
+                            <span class="input-char-count" id="charCount">0</span>
+                            <div class="input-footer-right">
+                                <span class="input-hint">⇧↵ newline</span>
+                                <button class="send-btn" id="sendBtn" onclick="sendPrompt()" title="Send (↵)">
+                                    <i class="fa-solid fa-paper-plane"></i>
+                                    <span>Send</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Context Budget Bar -->
+                    <div class="context-budget-bar">
+                        <div class="cbb-label">Context</div>
+                        <div class="cbb-track">
+                            <div class="cbb-fill" id="cbbFill" style="width:2%"></div>
+                        </div>
+                        <div class="cbb-count" id="cbbCount">0 / 128k tokens</div>
+                        <button class="cbb-trim-btn" onclick="trimContext()" title="Trim oldest messages"><i
+                                class="fa-solid fa-scissors"></i></button>
+                    </div>
+                </div>
+
+            </div><!-- /chat-region -->
+
+        </div><!-- /main-area -->
+
+        <!-- ── RIGHT PANEL RESIZE ── -->
+        <div class="resize-handle-v right-resize" id="rightResizeHandle"></div>
+
+        <!-- ═══════════════════════════════════════════════════
+       RIGHT PANEL  (Preview · Terminal · Logs)
+  ══════════════════════════════════════════════════════ -->
+        <div class="right-panel" id="rightPanel">
+
+            <!-- Tab Bar -->
+            <div class="rp-tab-bar">
+                <button class="rp-tab active" id="rptab-preview" onclick="switchRightTab('preview')">
+                    <i class="fa-solid fa-globe"></i> Preview
+                </button>
+                <button class="rp-tab" id="rptab-terminal" onclick="switchRightTab('terminal')">
+                    <i class="fa-solid fa-terminal"></i> Terminal
+                    <span class="rp-tab-badge" id="rptab-terminal-badge" style="display:none">1</span>
+                </button>
+                <button class="rp-tab" id="rptab-logs" onclick="switchRightTab('logs')">
+                    <i class="fa-solid fa-list-check"></i> Tool Log
+                </button>
+                <button class="rp-tab" id="rptab-diff" onclick="switchRightTab('diff')">
+                    <i class="fa-solid fa-code-compare"></i> Diff
+                </button>
+                <button class="rp-tab" id="rptab-output" onclick="switchRightTab('output')">
+                    <i class="fa-solid fa-square-terminal"></i> Output
+                </button>
+
+                <div class="rp-tab-spacer"></div>
+
+                <div class="rp-panel-actions">
+                    <button onclick="refreshPreview()" title="Refresh Preview"><i
+                            class="fa-solid fa-rotate-right"></i></button>
+                    <button onclick="openPreviewInTab()" title="Open in new tab"><i
+                            class="fa-solid fa-arrow-up-right-from-square"></i></button>
+                    <button onclick="toggleRightPanel()" title="Collapse Panel"><i
+                            class="fa-solid fa-chevron-right"></i></button>
+                </div>
+            </div>
+
+            <!-- ======= PREVIEW ======= -->
+            <div class="rp-section active" id="rpsec-preview">
+                <!-- Browser Bar -->
+                <div class="browser-bar">
+                    <div class="browser-dots">
+                        <span class="bd bd-red"></span>
+                        <span class="bd bd-yellow"></span>
+                        <span class="bd bd-green"></span>
+                    </div>
+                    <div class="browser-url-wrap">
+                        <button onclick="navBack()" title="Back"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button onclick="navForward()" title="Forward"><i
+                                class="fa-solid fa-chevron-right"></i></button>
+                        <button onclick="refreshPreview()" title="Refresh"><i
+                                class="fa-solid fa-rotate-right"></i></button>
+                        <input type="text" id="browserUrlInput" value="/workspace/index.html"
+                            onkeydown="if(event.key==='Enter') loadPreviewUrl(this.value)" />
+                        <button onclick="loadPreviewUrl(document.getElementById('browserUrlInput').value)" title="Go">
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                    <div class="browser-bar-right">
+                        <button onclick="toggleDeviceView('mobile')" title="Mobile View" id="mobileViewBtn">
+                            <i class="fa-solid fa-mobile-screen"></i>
+                        </button>
+                        <button onclick="toggleDeviceView('tablet')" title="Tablet View">
+                            <i class="fa-solid fa-tablet-screen-button"></i>
+                        </button>
+                        <button onclick="toggleDeviceView('desktop')" title="Desktop View">
+                            <i class="fa-solid fa-desktop"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Device Frame Wrapper -->
+                <div class="preview-device-wrap" id="previewDeviceWrap">
+                    <iframe id="previewFrame" src="about:blank" class="preview-iframe" title="Live Preview"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
+                </div>
+
+                <!-- Preview Empty State -->
+                <div class="preview-empty-state" id="previewEmptyState">
+                    <i class="fa-solid fa-globe"></i>
+                    <p>No preview yet</p>
+                    <span>Files created by the agent will appear here</span>
+                    <button onclick="refreshPreview()">Load Preview</button>
+                </div>
+            </div>
+
+            <!-- ======= TERMINAL ======= -->
+            <div class="rp-section" id="rpsec-terminal">
+                <!-- Terminal Tab Bar (multi-tab terminals) -->
+                <div class="term-tab-bar">
+                    <div class="term-tabs-scroll" id="termTabsScroll">
+                        <button class="term-tab active" id="term-tab-1" onclick="switchTermTab(1)">
+                            <i class="fa-solid fa-terminal"></i> bash
+                            <span onclick="closeTermTab(event,1)" class="term-tab-close"><i
+                                    class="fa-solid fa-xmark"></i></span>
+                        </button>
+                    </div>
+                    <button class="term-new-btn" onclick="newTermTab()" title="New Terminal"><i
+                            class="fa-solid fa-plus"></i></button>
+                    <div class="term-bar-actions">
+                        <button onclick="splitTerminal()" title="Split Terminal"><i
+                                class="fa-solid fa-table-columns"></i></button>
+                        <button onclick="clearTerminal()" title="Clear"><i class="fa-solid fa-eraser"></i></button>
+                        <button onclick="killTerminal()" title="Kill Terminal"><i
+                                class="fa-solid fa-trash"></i></button>
+                    </div>
+                </div>
+
+                <!-- xterm.js mounts here -->
+                <div class="xterm-container" id="xtermContainer"></div>
+
+                <!-- Fallback simple terminal -->
+                <div class="simple-terminal" id="simpleTerminal" style="display:none">
+                    <div class="sterm-output" id="stermOutput">
+                        <div class="sterm-welcome">NEXUS IDE — Workspace Terminal <span
+                                class="sterm-path">~/agent_workspace</span></div>
+                    </div>
+                    <div class="sterm-input-row">
+                        <span class="sterm-prompt">❯</span>
+                        <input type="text" id="stermInput" class="sterm-input"
+                            placeholder="npm install, python main.py, git status…" autocomplete="off" spellcheck="false"
+                            onkeydown="stermKeyDown(event)" />
+                        <button class="sterm-run" onclick="runStermCmd()"><i class="fa-solid fa-play"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======= TOOL LOG ======= -->
+            <div class="rp-section" id="rpsec-logs">
+                <div class="logs-toolbar">
+                    <span class="logs-title"><i class="fa-solid fa-list-check"></i> Tool Execution Log</span>
+                    <div class="logs-actions">
+                        <button onclick="clearToolLog()" title="Clear"><i class="fa-solid fa-eraser"></i></button>
+                        <button onclick="exportToolLog()" title="Export"><i class="fa-solid fa-download"></i></button>
+                    </div>
+                </div>
+                <div class="logs-filter-row">
+                    <button class="log-filter active" onclick="filterLogs('all')">All</button>
+                    <button class="log-filter" onclick="filterLogs('tool_call')"><i class="fa-solid fa-wrench"></i> Tool
+                        Calls</button>
+                    <button class="log-filter" onclick="filterLogs('file_op')"><i class="fa-solid fa-file-code"></i>
+                        File Ops</button>
+                    <button class="log-filter" onclick="filterLogs('bash')"><i class="fa-solid fa-terminal"></i>
+                        Bash</button>
+                    <button class="log-filter" onclick="filterLogs('error')"><i class="fa-solid fa-circle-xmark"></i>
+                        Errors</button>
+                </div>
+                <div class="tool-log-entries" id="toolLogEntries">
+                    <div class="log-empty">No tool calls yet</div>
+                </div>
+            </div>
+
+            <!-- ======= DIFF VIEWER ======= -->
+            <div class="rp-section" id="rpsec-diff">
+                <div class="diff-toolbar">
+                    <span class="diff-title"><i class="fa-solid fa-code-compare"></i> Diff Viewer</span>
+                    <div class="diff-controls">
+                        <select id="diffFileA" onchange="loadDiff()">
+                            <option>Select file A</option>
+                        </select>
+                        <i class="fa-solid fa-arrows-left-right"></i>
+                        <select id="diffFileB" onchange="loadDiff()">
+                            <option>Select file B</option>
+                        </select>
+                        <button onclick="loadDiff()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+                    </div>
+                </div>
+                <div class="diff-content" id="diffContent">
+                    <div class="diff-empty">Select two files to compare</div>
+                </div>
+            </div>
+
+            <!-- ======= OUTPUT CONSOLE ======= -->
+            <div class="rp-section" id="rpsec-output">
+                <div class="output-toolbar">
+                    <span class="output-title"><i class="fa-solid fa-square-terminal"></i> Output</span>
+                    <div class="output-source-select">
+                        <select id="outputSourceSelect" onchange="switchOutputSource(this.value)">
+                            <option value="all">All</option>
+                            <option value="app">App</option>
+                            <option value="test">Tests</option>
+                            <option value="build">Build</option>
+                            <option value="agent">Agent</option>
+                        </select>
+                    </div>
+                    <button onclick="clearOutput()" title="Clear"><i class="fa-solid fa-eraser"></i></button>
+                </div>
+                <div class="output-lines" id="outputLines">
+                    <div class="output-empty">No output yet. Run your project with F5</div>
+                </div>
+            </div>
+
+        </div><!-- /right-panel -->
+
+    </div><!-- /nexus-layout -->
+
+    <!-- ═══════════════════════════════════════════════════
+     STATUS BAR (bottom)
+══════════════════════════════════════════════════════ -->
+    <footer class="status-bar" id="statusBar">
+        <div class="sb-left">
+            <button class="sb-item sb-branch" onclick="togglePanel('git')" title="Git Branch">
+                <i class="fa-solid fa-code-branch"></i>
+                <span id="sbBranch">main</span>
+            </button>
+            <span class="sb-sep"></span>
+            <button class="sb-item" onclick="syncGit()" title="Sync with Remote">
+                <i class="fa-solid fa-arrows-rotate"></i>
+                <span id="sbSync">Synced</span>
+            </button>
+            <span class="sb-sep"></span>
+            <span class="sb-item sb-errors" id="sbErrors" onclick="togglePanel('debug')">
+                <i class="fa-solid fa-circle-xmark"></i> <span id="sbErrorCount">0</span>
+                <i class="fa-solid fa-triangle-exclamation"></i> <span id="sbWarnCount">0</span>
+            </span>
+        </div>
+
+        <div class="sb-center">
+            <span class="sb-item" id="sbAgentActivity">
+                <span class="sb-activity-dot" id="sbActivityDot"></span>
+                <span id="sbActivity">Agent ready</span>
+            </span>
+        </div>
+
+        <div class="sb-right">
+            <span class="sb-item" id="sbCursor">Ln 1, Col 1</span>
+            <span class="sb-sep"></span>
+            <span class="sb-item" id="sbLang" onclick="showLangPicker()">Plain Text</span>
+            <span class="sb-sep"></span>
+            <span class="sb-item" id="sbEncoding">UTF-8</span>
+            <span class="sb-sep"></span>
+            <span class="sb-item" id="sbIndent" onclick="showIndentMenu()">Spaces: 2</span>
+            <span class="sb-sep"></span>
+            <button class="sb-item sb-ultra-toggle" onclick="toggleUltraMode()" id="sbUltra" title="Ultra Mode">
+                <i class="fa-solid fa-bolt"></i> Standard
+            </button>
+            <span class="sb-sep"></span>
+            <span class="sb-item sb-provider" onclick="showSettings()">
+                <i class="fa-solid fa-satellite-dish"></i>
+                <span id="sbProvider">NVIDIA</span>
+            </span>
+        </div>
+    </footer>
+
+    <!-- ════════════════════════════════════════════════════
+     MODALS
+════════════════════════════════════════════════════ -->
+
+    <!-- ── Settings / API Keys ── -->
+    <div class="modal-overlay" id="settingsModal" onclick="hideModal('settingsModal')">
+        <div class="modal-box large" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-gear"></i> Settings</h3>
+                <button class="modal-close" onclick="hideModal('settingsModal')">&times;</button>
+            </div>
+            <div class="settings-layout">
+                <!-- Settings Nav -->
+                <div class="settings-nav">
+                    <button class="sn-item active" onclick="switchSettingsPage('api')" data-page="api"><i
+                            class="fa-solid fa-key"></i> API Keys</button>
+                    <button class="sn-item" onclick="switchSettingsPage('models')" data-page="models"><i
+                            class="fa-solid fa-microchip"></i> Models</button>
+                    <button class="sn-item" onclick="switchSettingsPage('agent')" data-page="agent"><i
+                            class="fa-solid fa-robot"></i> Agent Defaults</button>
+                    <button class="sn-item" onclick="switchSettingsPage('editor')" data-page="editor"><i
+                            class="fa-solid fa-code"></i> Editor</button>
+                    <button class="sn-item" onclick="switchSettingsPage('theme')" data-page="theme"><i
+                            class="fa-solid fa-palette"></i> Theme</button>
+                    <button class="sn-item" onclick="switchSettingsPage('keybindings')" data-page="keybindings"><i
+                            class="fa-solid fa-keyboard"></i> Key Bindings</button>
+                    <button class="sn-item" onclick="switchSettingsPage('env')" data-page="env"><i
+                            class="fa-solid fa-flask"></i> Env Variables</button>
+                    <button class="sn-item" onclick="switchSettingsPage('advanced')" data-page="advanced"><i
+                            class="fa-solid fa-sliders"></i> Advanced</button>
+                </div>
+                <!-- Settings Pages -->
+                <div class="settings-content">
+
+                    <!-- API Keys Page -->
+                    <div class="settings-page active" id="spage-api">
+                        <div class="sp-desc">Configure provider API keys. Keys are stored in browser localStorage and
+                            never sent to any server other than the respective provider.</div>
+
+                        <!-- NVIDIA -->
+                        <div class="key-provider-card">
+                            <div class="kpc-header">
+                                <div>
+                                    <span class="kpc-badge nvidia-badge">🚀 NVIDIA NIM</span>
+                                    <span class="kpc-sub">Free · Access 100+ models at build.nvidia.com</span>
+                                </div>
+                                <a href="https://build.nvidia.com" target="_blank" class="kpc-getkey">Get free key →</a>
+                            </div>
+                            <div class="key-input-row">
+                                <input type="password" id="nvidiaKeyInput" placeholder="nvapi-…" class="key-input"
+                                    autocomplete="off" />
+                                <button class="validate-btn" onclick="saveKey('nvidia')"><i
+                                        class="fa-solid fa-check"></i> Save &amp; Test</button>
+                            </div>
+                            <div class="key-status" id="nvidiaKeyStatus"></div>
+                        </div>
+
+                        <!-- OpenAI -->
+                        <div class="key-provider-card">
+                            <div class="kpc-header">
+                                <div>
+                                    <span class="kpc-badge openai-badge">🤖 OpenAI</span>
+                                    <span class="kpc-sub">GPT-4o, o3, o4-mini</span>
+                                </div>
+                                <a href="https://platform.openai.com" target="_blank" class="kpc-getkey">Get key →</a>
+                            </div>
+                            <div class="key-input-row">
+                                <input type="password" id="openaiKeyInput" placeholder="sk-…" class="key-input"
+                                    autocomplete="off" />
+                                <button class="validate-btn" onclick="saveKey('openai')"><i
+                                        class="fa-solid fa-check"></i> Save &amp; Test</button>
+                            </div>
+                            <div class="key-status" id="openaiKeyStatus"></div>
+                        </div>
+
+                        <!-- Anthropic -->
+                        <div class="key-provider-card">
+                            <div class="kpc-header">
+                                <div>
+                                    <span class="kpc-badge anthropic-badge">✦ Anthropic</span>
+                                    <span class="kpc-sub">Claude Opus 4, Sonnet 4, Haiku 4</span>
+                                </div>
+                                <a href="https://console.anthropic.com" target="_blank" class="kpc-getkey">Get key →</a>
+                            </div>
+                            <div class="key-input-row">
+                                <input type="password" id="anthropicKeyInput" placeholder="sk-ant-…" class="key-input"
+                                    autocomplete="off" />
+                                <button class="validate-btn" onclick="saveKey('anthropic')"><i
+                                        class="fa-solid fa-check"></i> Save &amp; Test</button>
+                            </div>
+                            <div class="key-status" id="anthropicKeyStatus"></div>
+                        </div>
+
+                        <!-- Google -->
+                        <div class="key-provider-card">
+                            <div class="kpc-header">
+                                <div>
+                                    <span class="kpc-badge google-badge">✦ Google</span>
+                                    <span class="kpc-sub">Gemini 2.5 Pro / Flash</span>
+                                </div>
+                                <a href="https://aistudio.google.com" target="_blank" class="kpc-getkey">Get key →</a>
+                            </div>
+                            <div class="key-input-row">
+                                <input type="password" id="googleKeyInput" placeholder="AIza…" class="key-input"
+                                    autocomplete="off" />
+                                <button class="validate-btn" onclick="saveKey('google')"><i
+                                        class="fa-solid fa-check"></i> Save &amp; Test</button>
+                            </div>
+                            <div class="key-status" id="googleKeyStatus"></div>
+                        </div>
+                    </div>
+
+                    <!-- Models Page -->
+                    <div class="settings-page" id="spage-models">
+                        <div class="sp-desc">Select the active model. Models with ✦ support extended context and tool
+                            use.</div>
+                        <div class="model-grid" id="settingsModelGrid">
+                            <!-- populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Agent Defaults Page -->
+                    <div class="settings-page" id="spage-agent">
+                        <div class="sp-row">
+                            <label>Max turns per session</label>
+                            <input type="number" id="cfg-maxTurns" value="50" min="1" max="200" />
+                        </div>
+                        <div class="sp-row">
+                            <label>Temperature</label>
+                            <div class="slider-wrap">
+                                <input type="range" id="cfg-temp" min="0" max="2" step="0.05" value="0.7"
+                                    oninput="updateSliderVal('cfg-temp','cfg-temp-val')" />
+                                <span id="cfg-temp-val">0.7</span>
+                            </div>
+                        </div>
+                        <div class="sp-row">
+                            <label>Max output tokens</label>
+                            <input type="number" id="cfg-maxTokens" value="4096" min="512" max="65536" />
+                        </div>
+                        <div class="sp-row">
+                            <label>System prompt prefix</label>
+                            <textarea id="cfg-sysPrompt" rows="4"
+                                placeholder="Additional instructions prepended to every session…"></textarea>
+                        </div>
+                        <div class="sp-row">
+                            <label>Auto-run on file create</label>
+                            <input type="checkbox" id="cfg-autoRun" checked />
+                        </div>
+                        <div class="sp-row">
+                            <label>Enable streaming</label>
+                            <input type="checkbox" id="cfg-streaming" checked />
+                        </div>
+                        <div class="sp-row">
+                            <label>UltraWorker mode</label>
+                            <input type="checkbox" id="cfg-ultra" />
+                        </div>
+                    </div>
+
+                    <!-- Editor Page -->
+                    <div class="settings-page" id="spage-editor">
+                        <div class="sp-row">
+                            <label>Font size</label>
+                            <input type="number" id="cfg-fontSize" value="14" min="8" max="28"
+                                onchange="updateEditorConfig()" />
+                        </div>
+                        <div class="sp-row">
+                            <label>Font family</label>
+                            <select id="cfg-fontFamily" onchange="updateEditorConfig()">
+                                <option value="'Space Mono', monospace">Space Mono</option>
+                                <option value="'Fira Code', monospace">Fira Code</option>
+                                <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                                <option value="'Cascadia Code', monospace">Cascadia Code</option>
+                                <option value="monospace">System Mono</option>
+                            </select>
+                        </div>
+                        <div class="sp-row">
+                            <label>Tab size</label>
+                            <select id="cfg-tabSize" onchange="updateEditorConfig()">
+                                <option>2</option>
+                                <option>4</option>
+                                <option>8</option>
+                            </select>
+                        </div>
+                        <div class="sp-row">
+                            <label>Word wrap</label>
+                            <input type="checkbox" id="cfg-wordWrap" onchange="updateEditorConfig()" />
+                        </div>
+                        <div class="sp-row">
+                            <label>Line numbers</label>
+                            <input type="checkbox" id="cfg-lineNums" checked onchange="updateEditorConfig()" />
+                        </div>
+                        <div class="sp-row">
+                            <label>Minimap</label>
+                            <input type="checkbox" id="cfg-minimap" onchange="updateEditorConfig()" />
+                        </div>
+                        <div class="sp-row">
+                            <label>Auto-save delay (ms)</label>
+                            <input type="number" id="cfg-autoSave" value="1000" min="0" />
+                        </div>
+                        <div class="sp-row">
+                            <label>Format on save</label>
+                            <input type="checkbox" id="cfg-formatOnSave" checked />
+                        </div>
+                    </div>
+
+                    <!-- Theme Page -->
+                    <div class="settings-page" id="spage-theme">
+                        <div class="sp-desc">Choose your visual theme.</div>
+                        <div class="theme-grid">
+                            <button class="theme-swatch active" data-theme-name="dark" onclick="applyTheme('dark')">
+                                <div class="sw-preview dark-preview"></div>
+                                <span>Deep Space</span>
+                            </button>
+                            <button class="theme-swatch" data-theme-name="light" onclick="applyTheme('light')">
+                                <div class="sw-preview light-preview"></div>
+                                <span>Paper White</span>
+                            </button>
+                            <button class="theme-swatch" data-theme-name="cyberpunk" onclick="applyTheme('cyberpunk')">
+                                <div class="sw-preview cyber-preview"></div>
+                                <span>Cyberpunk</span>
+                            </button>
+                            <button class="theme-swatch" data-theme-name="matrix" onclick="applyTheme('matrix')">
+                                <div class="sw-preview matrix-preview"></div>
+                                <span>Matrix</span>
+                            </button>
+                            <button class="theme-swatch" data-theme-name="nord" onclick="applyTheme('nord')">
+                                <div class="sw-preview nord-preview"></div>
+                                <span>Nord</span>
+                            </button>
+                            <button class="theme-swatch" data-theme-name="solarized" onclick="applyTheme('solarized')">
+                                <div class="sw-preview sol-preview"></div>
+                                <span>Solarized</span>
+                            </button>
+                        </div>
+                        <div class="sp-row">
+                            <label>Accent Color</label>
+                            <input type="color" id="cfg-accentColor" value="#00d4ff"
+                                onchange="updateAccentColor(this.value)" />
+                        </div>
+                        <div class="sp-row">
+                            <label>UI Scale</label>
+                            <select id="cfg-scale">
+                                <option>75%</option>
+                                <option>90%</option>
+                                <option selected>100%</option>
+                                <option>110%</option>
+                                <option>125%</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Key Bindings Page -->
+                    <div class="settings-page" id="spage-keybindings">
+                        <div class="sp-desc">Customize keyboard shortcuts.</div>
+                        <div class="keybinding-table" id="keybindingTable">
+                            <!-- populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Env Variables Page -->
+                    <div class="settings-page" id="spage-env">
+                        <div class="sp-desc">Environment variables injected into the workspace terminal and build
+                            processes.</div>
+                        <div class="env-list" id="envList">
+                            <div class="env-row header">
+                                <span>Key</span><span>Value</span><span></span>
+                            </div>
+                        </div>
+                        <button class="env-add-btn" onclick="addEnvVar()"><i class="fa-solid fa-plus"></i> Add
+                            Variable</button>
+                        <div class="env-note"><i class="fa-solid fa-lock"></i> Values are stored locally and never
+                            transmitted.</div>
+                    </div>
+
+                    <!-- Advanced Page -->
+                    <div class="settings-page" id="spage-advanced">
+                        <div class="sp-row">
+                            <label>Custom API Base URL</label>
+                            <input type="text" id="cfg-baseUrl" placeholder="https://integrate.api.nvidia.com/v1" />
+                        </div>
+                        <div class="sp-row">
+                            <label>Request timeout (s)</label>
+                            <input type="number" id="cfg-timeout" value="120" />
+                        </div>
+                        <div class="sp-row">
+                            <label>Verbose logging</label>
+                            <input type="checkbox" id="cfg-verbose" />
+                        </div>
+                        <div class="sp-row">
+                            <label>Enable telemetry</label>
+                            <input type="checkbox" id="cfg-telemetry" />
+                        </div>
+                        <div class="sp-row danger-row">
+                            <label>Clear all data</label>
+                            <button class="danger-btn" onclick="clearAllData()"><i class="fa-solid fa-trash"></i> Reset
+                                NEXUS</button>
+                        </div>
+                    </div>
+
+                </div><!-- /settings-content -->
+            </div><!-- /settings-layout -->
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="hideModal('settingsModal')">Cancel</button>
+                <button class="btn-primary" onclick="saveSettings()"><i class="fa-solid fa-floppy-disk"></i> Save
+                    Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Model Selector Modal ── -->
+    <div class="modal-overlay" id="modelSelectorModal" onclick="hideModal('modelSelectorModal')">
+        <div class="modal-box large" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-microchip"></i> Select Model</h3>
+                <button class="modal-close" onclick="hideModal('modelSelectorModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="model-filter-row">
+                    <input type="text" id="modelFilterInput" placeholder="Filter models…"
+                        oninput="filterModels(this.value)" />
+                    <div class="model-filter-chips">
+                        <button class="mfc active" onclick="filterModelsByProvider('all')">All</button>
+                        <button class="mfc" onclick="filterModelsByProvider('nvidia')">🚀 NVIDIA</button>
+                        <button class="mfc" onclick="filterModelsByProvider('openai')">🤖 OpenAI</button>
+                        <button class="mfc" onclick="filterModelsByProvider('anthropic')">✦ Anthropic</button>
+                        <button class="mfc" onclick="filterModelsByProvider('google')">✦ Google</button>
+                    </div>
+                </div>
+                <div class="model-cards-grid" id="modelCardsGrid">
+                    <!-- populated by JS -->
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Step Indicator -->
-        <div class="step-bar" id="stepBar">
-            <div class="step-bar-inner" id="stepBarInner">
-                <i class="fa-solid fa-circle-notch spinner"></i>
-                <span id="stepLabel">Agent working...</span>
+    <!-- ── Open Folder Modal ── -->
+    <div class="modal-overlay" id="openFolderModal" onclick="hideModal('openFolderModal')">
+        <div class="modal-box small" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-folder-open"></i> Open Folder</h3>
+                <button class="modal-close" onclick="hideModal('openFolderModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" class="modal-input" id="openFolderName" placeholder="Absolute path, e.g. C:\Projects\MyProject" autofocus 
+                       onkeydown="if(event.key==='Enter') openFolder()"/>
+            </div>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="hideModal('openFolderModal')">Cancel</button>
+                <button class="btn-primary" onclick="openFolder()"><i class="fa-solid fa-folder-open"></i> Open</button>
             </div>
         </div>
+    </div>
 
-        <div class="input-wrapper">
-            <div class="input-hints" id="inputHints">
-                <span onclick="quickPrompt('List all files in the workspace and explain what each does')">📋 Explore files</span>
-                <span onclick="quickPrompt('Optimize and refactor all code in the workspace for performance and readability')">⚡ Optimize code</span>
-                <span onclick="quickPrompt('Add a dark/light mode toggle to the existing app')">🌙 Dark mode</span>
-                <span onclick="quickPrompt('Write a comprehensive README.md for this project')">📖 Write README</span>
-                <span onclick="quickPrompt('Add error handling, input validation, and loading states to the existing app')">🛡️ Add validation</span>
-                <span onclick="quickPrompt('Make the app fully responsive and mobile-friendly')">📱 Mobile-friendly</span>
+    <!-- ── New File Modal ── -->
+    <div class="modal-overlay" id="newFileModal" onclick="hideModal('newFileModal')">
+        <div class="modal-box small" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-file-plus"></i> New File</h3>
+                <button class="modal-close" onclick="hideModal('newFileModal')">&times;</button>
             </div>
-            <div class="input-container" id="inputContainer">
-                <textarea id="prompt" placeholder="Describe what to build or ask anything... (↵ send, ⇧↵ newline)"></textarea>
-                <div class="input-footer">
-                    <span class="char-count" id="charCount">0</span>
-                    <span class="input-shortcut">⇧↵ newline</span>
-                    <button class="send-btn" id="sendBtn" onclick="sendPrompt()">
+            <div class="modal-body">
+                <div class="nf-templates">
+                    <span>Quick templates:</span>
+                    <button onclick="setNewFilePath('index.html')">HTML</button>
+                    <button onclick="setNewFilePath('style.css')">CSS</button>
+                    <button onclick="setNewFilePath('app.js')">JS</button>
+                    <button onclick="setNewFilePath('main.py')">Python</button>
+                    <button onclick="setNewFilePath('server.js')">Node</button>
+                    <button onclick="setNewFilePath('Dockerfile')">Docker</button>
+                </div>
+                <input type="text" class="modal-input" id="newFilePath"
+                    placeholder="e.g. index.html or src/components/Button.jsx" autofocus />
+            </div>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="hideModal('newFileModal')">Cancel</button>
+                <button class="btn-primary" onclick="createNewFile()"><i class="fa-solid fa-plus"></i> Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── New Folder Modal ── -->
+    <div class="modal-overlay" id="newFolderModal" onclick="hideModal('newFolderModal')">
+        <div class="modal-box small" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-folder-plus"></i> New Folder</h3>
+                <button class="modal-close" onclick="hideModal('newFolderModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" class="modal-input" id="newFolderPath" placeholder="e.g. src/components" autofocus />
+            </div>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="hideModal('newFolderModal')">Cancel</button>
+                <button class="btn-primary" onclick="createNewFolder()"><i class="fa-solid fa-plus"></i> Create</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Rename Modal ── -->
+    <div class="modal-overlay" id="renameModal" onclick="hideModal('renameModal')">
+        <div class="modal-box small" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-pencil"></i> Rename</h3>
+                <button class="modal-close" onclick="hideModal('renameModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" class="modal-input" id="renameInput" autofocus />
+            </div>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="hideModal('renameModal')">Cancel</button>
+                <button class="btn-primary" onclick="confirmRename()">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Memory Modal ── -->
+    <div class="modal-overlay" id="memoryModal" onclick="hideModal('memoryModal')">
+        <div class="modal-box large" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-brain"></i> Agent Memory &amp; Context</h3>
+                <button class="modal-close" onclick="hideModal('memoryModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="memory-stats-row">
+                    <div class="ms-card"><span id="memMsgs">0</span><label>Messages</label></div>
+                    <div class="ms-card"><span id="memTokens">0</span><label>Tokens Used</label></div>
+                    <div class="ms-card"><span id="memCost">$0.00</span><label>Est. Cost</label></div>
+                    <div class="ms-card"><span id="memTools">0</span><label>Tool Calls</label></div>
+                </div>
+                <div class="memory-viewer" id="memoryViewer"></div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="trimContext()"><i class="fa-solid fa-scissors"></i> Trim Old
+                    Messages</button>
+                <button class="btn-ghost" onclick="exportChat()"><i class="fa-solid fa-download"></i> Export</button>
+                <button class="btn-danger" onclick="clearMemory()"><i class="fa-solid fa-trash"></i> Clear All</button>
+                <button class="btn-primary" onclick="hideModal('memoryModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Token Stats Modal ── -->
+    <div class="modal-overlay" id="tokenStatsModal" onclick="hideModal('tokenStatsModal')">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-coins"></i> Token &amp; Cost Statistics</h3>
+                <button class="modal-close" onclick="hideModal('tokenStatsModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="token-chart-placeholder" id="tokenChart">
+                    <!-- Chart rendered by JS -->
+                </div>
+                <div class="token-breakdown" id="tokenBreakdown"></div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn-primary" onclick="hideModal('tokenStatsModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Keyboard Shortcuts Modal ── -->
+    <div class="modal-overlay" id="shortcutsModal" onclick="hideModal('shortcutsModal')">
+        <div class="modal-box large" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-keyboard"></i> Keyboard Shortcuts</h3>
+                <button class="modal-close" onclick="hideModal('shortcutsModal')">&times;</button>
+            </div>
+            <div class="modal-body shortcuts-body">
+                <div class="shortcut-col">
+                    <h4>General</h4>
+                    <div class="sc-row"><span>Command Palette</span><kbd>⌘K</kbd></div>
+                    <div class="sc-row"><span>New Session</span><kbd>⌘N</kbd></div>
+                    <div class="sc-row"><span>New File</span><kbd>⌘T</kbd></div>
+                    <div class="sc-row"><span>Save File</span><kbd>⌘S</kbd></div>
+                    <div class="sc-row"><span>Save All</span><kbd>⌘⇧S</kbd></div>
+                    <div class="sc-row"><span>Toggle Sidebar</span><kbd>⌘B</kbd></div>
+                    <div class="sc-row"><span>Toggle Terminal</span><kbd>⌘`</kbd></div>
+                    <div class="sc-row"><span>Settings</span><kbd>⌘,</kbd></div>
+                    <div class="sc-row"><span>Zen Mode</span><kbd>⌘K Z</kbd></div>
+                </div>
+                <div class="shortcut-col">
+                    <h4>Editor</h4>
+                    <div class="sc-row"><span>Find</span><kbd>⌘F</kbd></div>
+                    <div class="sc-row"><span>Global Search</span><kbd>⌘⇧F</kbd></div>
+                    <div class="sc-row"><span>Format</span><kbd>⌥⇧F</kbd></div>
+                    <div class="sc-row"><span>Toggle Comment</span><kbd>⌘/</kbd></div>
+                    <div class="sc-row"><span>Select All</span><kbd>⌘A</kbd></div>
+                    <div class="sc-row"><span>Undo</span><kbd>⌘Z</kbd></div>
+                    <div class="sc-row"><span>Redo</span><kbd>⌘⇧Z</kbd></div>
+                    <div class="sc-row"><span>Split Editor</span><kbd>⌘\</kbd></div>
+                </div>
+                <div class="shortcut-col">
+                    <h4>Agent</h4>
+                    <div class="sc-row"><span>Send Message</span><kbd>↵</kbd></div>
+                    <div class="sc-row"><span>Newline</span><kbd>⇧↵</kbd></div>
+                    <div class="sc-row"><span>Stop Agent</span><kbd>⌘.</kbd></div>
+                    <div class="sc-row"><span>Clear Chat</span><kbd>⌘⇧K</kbd></div>
+                    <div class="sc-row"><span>Toggle Ultra</span><kbd>⌘U</kbd></div>
+                    <div class="sc-row"><span>View Memory</span><kbd>⌘M</kbd></div>
+                </div>
+                <div class="shortcut-col">
+                    <h4>Run &amp; Debug</h4>
+                    <div class="sc-row"><span>Run Project</span><kbd>F5</kbd></div>
+                    <div class="sc-row"><span>Stop</span><kbd>⇧F5</kbd></div>
+                    <div class="sc-row"><span>Step Over</span><kbd>F10</kbd></div>
+                    <div class="sc-row"><span>Step Into</span><kbd>F11</kbd></div>
+                    <div class="sc-row"><span>Step Out</span><kbd>⇧F11</kbd></div>
+                    <div class="sc-row"><span>Toggle Breakpoint</span><kbd>F9</kbd></div>
+                </div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn-primary" onclick="hideModal('shortcutsModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Deploy Panel Modal ── -->
+    <div class="modal-overlay" id="deployModal" onclick="hideModal('deployModal')">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-rocket"></i> Deploy Workspace</h3>
+                <button class="modal-close" onclick="hideModal('deployModal')">&times;</button>
+            </div>
+            <div class="modal-body deploy-body">
+                <div class="deploy-targets">
+                    <div class="deploy-card" onclick="deployTo('netlify')">
+                        <i class="fa-solid fa-globe"></i>
+                        <span>Netlify</span>
+                        <small>Static sites &amp; functions</small>
+                    </div>
+                    <div class="deploy-card" onclick="deployTo('vercel')">
+                        <i class="fa-solid fa-triangle"></i>
+                        <span>Vercel</span>
+                        <small>Next.js &amp; frontend apps</small>
+                    </div>
+                    <div class="deploy-card" onclick="deployTo('github')">
+                        <i class="fa-brands fa-github"></i>
+                        <span>GitHub Pages</span>
+                        <small>Static from repository</small>
+                    </div>
+                    <div class="deploy-card" onclick="deployTo('fly')">
                         <i class="fa-solid fa-paper-plane"></i>
-                    </button>
+                        <span>Fly.io</span>
+                        <small>Fullstack &amp; Docker apps</small>
+                    </div>
+                    <div class="deploy-card" onclick="deployTo('railway')">
+                        <i class="fa-solid fa-train-tram"></i>
+                        <span>Railway</span>
+                        <small>Databases &amp; backends</small>
+                    </div>
+                    <div class="deploy-card" onclick="deployTo('custom')">
+                        <i class="fa-solid fa-server"></i>
+                        <span>Custom Server</span>
+                        <small>SSH / FTP deploy</small>
+                    </div>
                 </div>
+                <div class="deploy-log" id="deployLog"></div>
             </div>
         </div>
     </div>
 
-    <!-- Resize Handle -->
-    <div class="resize-handle" id="resizeHandle"></div>
-
-    <!-- Right Panel -->
-    <div class="right-panel">
-        <div class="panel-tabs">
-            <button class="panel-tab active" id="tab-preview" onclick="switchTab('preview')">
-                <i class="fa-solid fa-globe"></i> Preview
-            </button>
-            <button class="panel-tab" id="tab-terminal" onclick="switchTab('terminal')">
-                <i class="fa-solid fa-terminal"></i> Terminal
-            </button>
-            <button class="panel-tab" id="tab-editor" onclick="switchTab('editor')">
-                <i class="fa-solid fa-code"></i> Editor
-            </button>
-            <div class="panel-actions">
-                <button onclick="refreshBrowser()" title="Refresh Preview"><i class="fa-solid fa-rotate-right"></i></button>
-                <button onclick="openInNewTab()" title="Open in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+    <!-- ── Confirm Dialog ── -->
+    <div class="modal-overlay" id="confirmModal" onclick="cancelConfirm()">
+        <div class="modal-box small confirm-box" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3 id="confirmTitle">Confirm Action</h3>
             </div>
-        </div>
-
-        <!-- Preview -->
-        <div class="preview-panel active" id="preview-panel">
-            <div class="preview-bar">
-                <div class="preview-dots">
-                    <span class="dot dot-red"></span>
-                    <span class="dot dot-yellow"></span>
-                    <span class="dot dot-green"></span>
-                </div>
-                <input type="text" id="browserUrl" value="/workspace/index.html" onkeydown="if(event.key==='Enter') refreshBrowser()">
-                <button onclick="refreshBrowser()"><i class="fa-solid fa-rotate-right"></i></button>
-                <button onclick="openInNewTab()"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+            <div class="modal-body">
+                <p id="confirmMessage">Are you sure?</p>
             </div>
-            <iframe src="about:blank" class="preview-iframe" id="previewFrame"
-                title="Live Preview" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
-            <div class="preview-empty" id="previewEmpty">
-                <i class="fa-solid fa-globe"></i>
-                <p>No preview yet</p>
-                <span>Files created by the agent will appear here</span>
-            </div>
-        </div>
-
-        <!-- Terminal -->
-        <div class="terminal-panel" id="terminal-panel">
-            <div class="terminal-toolbar">
-                <span class="term-title"><i class="fa-solid fa-terminal"></i> Workspace Terminal</span>
-                <div style="display:flex;gap:4px">
-                    <button onclick="clearTerminal()" title="Clear"><i class="fa-solid fa-eraser"></i></button>
-                </div>
-            </div>
-            <div class="terminal-output" id="terminalOutput">
-                <div class="term-welcome">Claw IDE Terminal — commands run inside <strong>agent_workspace/</strong></div>
-            </div>
-            <div class="terminal-input-row">
-                <span class="prompt-char">$</span>
-                <input type="text" id="terminalInput" placeholder="npm install, pip install, python script.py..." autocomplete="off" spellcheck="false">
-                <button class="term-run-btn" onclick="runTerminalFromBtn()"><i class="fa-solid fa-play"></i></button>
-            </div>
-        </div>
-
-        <!-- Editor -->
-        <div class="editor-panel" id="editor-panel">
-            <div class="editor-toolbar">
-                <span class="editor-filename" id="editorFilename">No file open</span>
-                <div class="editor-actions">
-                    <span class="editor-lang" id="editorLang"></span>
-                    <button onclick="saveCurrentFile()" id="saveBtn" class="save-btn" style="display:none" title="Save (Ctrl+S)">
-                        <i class="fa-solid fa-floppy-disk"></i> Save
-                    </button>
-                    <button onclick="closeEditor()" title="Close"><i class="fa-solid fa-xmark"></i></button>
-                </div>
-            </div>
-            <div class="editor-wrap">
-                <div class="line-numbers" id="lineNumbers"></div>
-                <textarea class="editor-textarea" id="editorTextarea" spellcheck="false" oninput="onEditorChange()"></textarea>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="cancelConfirm()">Cancel</button>
+                <button class="btn-danger" id="confirmOkBtn" onclick="okConfirm()">Confirm</button>
             </div>
         </div>
     </div>
-</div>
 
-<!-- ==================== SETTINGS MODAL ==================== -->
-<div class="modal-overlay" id="settingsModal" onclick="hideSettings(event)">
-    <div class="modal settings-modal">
-        <div class="modal-title"><i class="fa-solid fa-gear"></i> API Key Settings</div>
-        <p class="settings-desc">Configure your NVIDIA API key. Get a free key at <a href="https://build.nvidia.com" target="_blank" style="color:var(--accent)">build.nvidia.com</a> — no credit card required.</p>
-
-        <!-- NVIDIA -->
-        <div class="settings-provider">
-            <div class="settings-provider-header">
-                <div class="settings-provider-name">
-                    <span class="provider-badge nvidia-badge">🚀 NVIDIA</span>
-                    <span class="provider-sub">Free · Phi-4, Llama 3.3, DeepSeek R1, Qwen2.5 Coder & more</span>
+    <!-- ── About Modal ── -->
+    <div class="modal-overlay" id="aboutModal" onclick="hideModal('aboutModal')">
+        <div class="modal-box small" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3>About NEXUS IDE</h3>
+                <button class="modal-close" onclick="hideModal('aboutModal')">&times;</button>
+            </div>
+            <div class="modal-body about-body">
+                <div class="about-logo">⬡</div>
+                <h2>NEXUS<span>IDE</span></h2>
+                <p>Autonomous AI Agent Development Environment</p>
+                <div class="about-version">v2.0.0 — Advanced Edition</div>
+                <div class="about-stack">
+                    Built with CodeMirror · xterm.js · marked.js · highlight.js
                 </div>
-                <a href="https://build.nvidia.com" target="_blank" class="get-key-link">Get free key →</a>
             </div>
-            <div class="key-input-row">
-                <input type="password" id="nvidiaKeyInput" placeholder="nvapi-..." class="key-input" autocomplete="off">
-                <button class="validate-btn" onclick="saveAndValidateKey()"><i class="fa-solid fa-check"></i> Save & Test</button>
+            <div class="modal-foot">
+                <button class="btn-primary" onclick="hideModal('aboutModal')">Close</button>
             </div>
-            <div class="key-status" id="nvidiaKeyStatus"></div>
-        </div>
-
-        <div class="modal-actions" style="margin-top:16px">
-            <button class="btn-ghost" onclick="hideSettings()">Close</button>
         </div>
     </div>
-</div>
 
-<!-- ==================== NEW FILE DIALOG ==================== -->
-<div class="modal-overlay" id="newFileModal" onclick="hideNewFileDialog(event)">
-    <div class="modal">
-        <div class="modal-title"><i class="fa-solid fa-file-plus"></i> New File</div>
-        <input type="text" class="modal-input" id="newFilePath" placeholder="e.g. index.html or src/app.js" autofocus>
-        <div class="modal-actions">
-            <button class="btn-ghost" onclick="hideNewFileDialog()">Cancel</button>
-            <button class="btn-primary" onclick="createNewFile()">Create</button>
+    <!-- ── Missing Modals Added ── -->
+    <div class="modal-overlay" id="newFileModal" style="display:none" onclick="hideModal('newFileModal')">
+        <div class="modal-box small" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3>New File</h3>
+                <button class="modal-close" onclick="hideModal('newFileModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="newFilePath" placeholder="path/to/script.py" autofocus style="width:100%; padding:8px;" onkeydown="if(event.key==='Enter') createNewFile()" />
+            </div>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="hideModal('newFileModal')">Cancel</button>
+                <button class="btn-primary" onclick="createNewFile()">Create</button>
+            </div>
         </div>
     </div>
-</div>
 
-<!-- ==================== CONTEXT MENU ==================== -->
-<div class="ctx-menu" id="ctxMenu">
-    <div onclick="ctxOpen()"><i class="fa-solid fa-eye"></i> Open</div>
-    <div onclick="ctxPreview()"><i class="fa-solid fa-globe"></i> Preview</div>
-    <div onclick="ctxRename()"><i class="fa-solid fa-pencil"></i> Rename</div>
-    <div class="ctx-sep"></div>
-    <div onclick="ctxDelete()" class="ctx-danger"><i class="fa-solid fa-trash"></i> Delete</div>
-</div>
-
-<!-- ==================== RENAME DIALOG ==================== -->
-<div class="modal-overlay" id="renameModal" onclick="hideRenameDialog(event)">
-    <div class="modal">
-        <div class="modal-title"><i class="fa-solid fa-pencil"></i> Rename File</div>
-        <input type="text" class="modal-input" id="renameInput" placeholder="New filename">
-        <div class="modal-actions">
-            <button class="btn-ghost" onclick="hideRenameDialog()">Cancel</button>
-            <button class="btn-primary" onclick="doRename()">Rename</button>
+    <div class="modal-overlay" id="newFolderModal" style="display:none" onclick="hideModal('newFolderModal')">
+        <div class="modal-box small" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3>New Folder</h3>
+                <button class="modal-close" onclick="hideModal('newFolderModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="newFolderPath" placeholder="path/to/folder" autofocus style="width:100%; padding:8px;" onkeydown="if(event.key==='Enter') createNewFolder()" />
+            </div>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="hideModal('newFolderModal')">Cancel</button>
+                <button class="btn-primary" onclick="createNewFolder()">Create</button>
+            </div>
         </div>
     </div>
-</div>
 
-<script src="/static/js/main.js"></script>
+    <div class="modal-overlay" id="renameModal" style="display:none" onclick="hideModal('renameModal')">
+        <div class="modal-box small" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3>Rename File</h3>
+                <button class="modal-close" onclick="hideModal('renameModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="renameInput" autofocus style="width:100%; padding:8px;" onkeydown="if(event.key==='Enter') confirmRename()" />
+            </div>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="hideModal('renameModal')">Cancel</button>
+                <button class="btn-primary" onclick="confirmRename()">Rename</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modelSelectorModal" style="display:none" onclick="hideModal('modelSelectorModal')">
+        <div class="modal-box large" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3>Select Model</h3>
+                <button class="modal-close" onclick="hideModal('modelSelectorModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" placeholder="Search models..." oninput="filterModels(this.value)" style="width:100%; padding:8px; margin-bottom:10px;" />
+                <div class="model-cards-grid" id="modelCardsGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Open Folder Modal ── -->
+    <div class="modal-overlay" id="openFolderModal" style="display:none" onclick="hideModal('openFolderModal')">
+        <div class="modal-box small" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-folder-open"></i> Open Folder</h3>
+                <button class="modal-close" onclick="hideModal('openFolderModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:#8b949e;margin-bottom:10px;">Enter the absolute path to a folder on the server to open as workspace:</p>
+                <input type="text" id="openFolderName" placeholder="C:\Users\me\projects\myapp" autofocus style="width:100%; padding:10px; font-size:14px;" onkeydown="if(event.key==='Enter') openFolder()" />
+            </div>
+            <div class="modal-foot">
+                <button class="btn-ghost" onclick="hideModal('openFolderModal')">Cancel</button>
+                <button class="btn-primary" onclick="openFolder()"><i class="fa-solid fa-folder-open"></i> Open</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════
+     CONTEXT MENUS
+════════════════════════════════════════════════════ -->
+
+    <!-- File Tree Context Menu -->
+    <div class="ctx-menu" id="fileCtxMenu">
+        <div class="ctx-item" onclick="ctxFileOpen()"><i class="fa-solid fa-file-code"></i> Open</div>
+        <div class="ctx-item" onclick="ctxFilePreview()"><i class="fa-solid fa-globe"></i> Open in Preview</div>
+        <div class="ctx-item" onclick="ctxFileOpenSplit()"><i class="fa-solid fa-table-columns"></i> Open to the Side
+        </div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="ctxFileCopyPath()"><i class="fa-solid fa-copy"></i> Copy Path</div>
+        <div class="ctx-item" onclick="ctxFileCopyRelPath()"><i class="fa-regular fa-copy"></i> Copy Relative Path</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="ctxFileRename()"><i class="fa-solid fa-pencil"></i> Rename</div>
+        <div class="ctx-item" onclick="ctxFileDuplicate()"><i class="fa-solid fa-clone"></i> Duplicate</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item ctx-danger" onclick="ctxFileDelete()"><i class="fa-solid fa-trash"></i> Delete</div>
+    </div>
+
+    <!-- Tab Context Menu -->
+    <div class="ctx-menu" id="tabCtxMenu">
+        <div class="ctx-item" onclick="ctxTabClose()"><i class="fa-solid fa-xmark"></i> Close</div>
+        <div class="ctx-item" onclick="ctxTabCloseOthers()"><i class="fa-solid fa-xmark"></i> Close Others</div>
+        <div class="ctx-item" onclick="ctxTabCloseAll()"><i class="fa-solid fa-xmark"></i> Close All</div>
+        <div class="ctx-sep"></div>
+        <div class="ctx-item" onclick="ctxTabSplit()"><i class="fa-solid fa-table-columns"></i> Split Right</div>
+        <div class="ctx-item" onclick="ctxTabCopyPath()"><i class="fa-solid fa-copy"></i> Copy Path</div>
+        <div class="ctx-item" onclick="ctxTabReveal()"><i class="fa-solid fa-folder-tree"></i> Reveal in Explorer</div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════
+     HIDDEN INPUTS
+════════════════════════════════════════════════════ -->
+    <input type="file" id="uploadInput" multiple style="display:none" onchange="handleFileUpload(this.files)" />
+    <input type="file" id="workspaceZipInput" accept=".zip" style="display:none"
+        onchange="importWorkspace(this.files)" />
+    <input type="file" id="attachInput" multiple style="display:none" onchange="handleAttachments(this.files)" />
+
+    <!-- ════════════════════════════════════════════════════
+     DRAG-TO-RESIZE GHOST
+════════════════════════════════════════════════════ -->
+    <div class="resize-ghost" id="resizeGhost" style="display:none"></div>
+
+    <!-- ════════════════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════════════════ -->
+    <script src="/static/js/nexus.js"></script>
+    <script src="/static/js/editor.js"></script>
+    <script src="/static/js/agent.js"></script>
+    <script src="/static/js/terminal.js"></script>
+    <script src="/static/js/files.js"></script>
+    <script src="/static/js/git.js"></script>
+    <script src="/static/js/models.js"></script>
+    <script src="/static/js/tools.js"></script>
+    <script src="/static/js/keybindings.js"></script>
+    <script src="/static/js/ui.js"></script>
+
 </body>
+
 </html>

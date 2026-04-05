@@ -93,6 +93,18 @@ NVIDIA_MODELS: dict[str, dict] = {
         "price_note": "Free",
         "nvidia_id": "nvidia/llama-3.3-nemotron-super-49b-v1",
     },
+    "nvidia:mistral-small-4": {
+        "label": "Mistral Small 4",
+        "short": "Advanced Coding",
+        "description": "Mistral Small 4 (119B) — an advanced model for complex coding tasks.",
+        "context": 32768,
+        "tier": "free",
+        "provider": "nvidia",
+        "role": "coding",
+        "emoji": "💻",
+        "price_note": "Free",
+        "nvidia_id": "mistralai/mistral-small-4-119b-2603",
+    },
     "nvidia:gemma-3-12b": {
         "label": "Gemma 3 12B",
         "short": "Google Balanced",
@@ -119,6 +131,18 @@ NVIDIA_MODELS: dict[str, dict] = {
         "temperature": 1,
         "top_p": 0.95,
     },
+    "nvidia:nemotron-3-super-120b": {
+        "label": "Nemotron-3 Super 120B",
+        "short": "Adv. Professional Coding",
+        "description": "Nemotron-3 Super 120B — Advanced professional model tuned for complex reasoning and enterprise-grade coding.",
+        "context": 32768,
+        "tier": "free",
+        "provider": "nvidia",
+        "role": "coding",
+        "emoji": "💻",
+        "price_note": "Free",
+        "nvidia_id": "nvidia/nemotron-3-super-120b-a12b",
+    },
 }
 
 ALL_MODELS = NVIDIA_MODELS
@@ -142,6 +166,38 @@ class LLMClient:
     def is_smart(self) -> bool:
         return False  # no smart routing needed — all models are on same provider
 
+    def _count_tokens(self, text: str) -> int:
+        # Estimate ~2 chars per token for code/mixed text to be safe
+        return max(1, len(text) // 2)
+
+    def _get_safe_max_tokens(self, messages: list, ctx_limit: int, desired: int = 4096) -> int:
+        total_input = sum(self._count_tokens(m.get("content", "")) for m in messages)
+        remaining = ctx_limit - total_input - 300  # 300-token safety buffer
+        return min(desired, max(512, remaining))
+
+    def _trim_messages(self, messages: list, ctx_limit: int, completion_budget: int = 4096) -> list:
+        max_input = ctx_limit - completion_budget - 500  # 500-token safety buffer
+        system_msgs = [m for m in messages if m.get("role") == "system"]
+        other_msgs  = [m for m in messages if m.get("role") != "system"]
+
+        while True:
+            total = sum(self._count_tokens(m.get("content", "")) for m in system_msgs + other_msgs)
+            if total <= max_input or len(other_msgs) <= 1:
+                break
+            other_msgs.pop(0)
+
+        # Truncate if still too large
+        total = sum(self._count_tokens(m.get("content", "")) for m in system_msgs + other_msgs)
+        if total > max_input and other_msgs:
+            m = other_msgs[0]
+            sys_toks = sum(self._count_tokens(m.get("content", "")) for m in system_msgs)
+            target = max_input - sys_toks
+            if target > 100:
+                content = m.get("content", "")
+                char_lim = target * 2
+                m["content"] = content[:char_lim] + "... [TRUNCATED]"
+        return system_msgs + other_msgs
+
     def chat(self, messages: List[Dict[str, str]], turn_type: str = "default") -> str:
         api_key = get_nvidia_key()
         if not api_key:
@@ -152,6 +208,11 @@ class LLMClient:
 
         info = NVIDIA_MODELS.get(self.model, NVIDIA_MODELS[DEFAULT_MODEL])
         nvidia_model_id = info.get("nvidia_id", "microsoft/phi-4-mini-instruct")
+        ctx_limit = info.get("context", 32768)
+
+        # Enforce context limits
+        messages = self._trim_messages(messages, ctx_limit, 4096)
+        max_tok = self._get_safe_max_tokens(messages, ctx_limit, 4096)
 
         try:
             client = OpenAI(
@@ -160,12 +221,13 @@ class LLMClient:
             )
             temperature = info.get("temperature", 0.2)
             top_p = info.get("top_p", 0.7)
+
             completion = client.chat.completions.create(
                 model=nvidia_model_id,
                 messages=messages,
                 temperature=temperature,
                 top_p=top_p,
-                max_tokens=8192,
+                max_tokens=max_tok,
                 stream=True,
             )
             result = ""
@@ -195,6 +257,54 @@ class LLMClient:
                     f"Model not found (404). The model '{nvidia_model_id}' may be unavailable."
                 )
             return f"NVIDIA API error: {err}"
+
+    def chat_stream(self, messages: List[Dict[str, str]], turn_type: str = "default"):
+        api_key = get_nvidia_key()
+        if not api_key:
+            yield "CLAW_ERROR:NO_KEY:nvidia|No NVIDIA API key configured. Add your key in the ⚙ Settings panel."
+            return
+
+        info = NVIDIA_MODELS.get(self.model, NVIDIA_MODELS[DEFAULT_MODEL])
+        nvidia_model_id = info.get("nvidia_id", "microsoft/phi-4-mini-instruct")
+        ctx_limit = info.get("context", 32768)
+
+        # Enforce context limits
+        messages = self._trim_messages(messages, ctx_limit, 4096)
+        max_tok = self._get_safe_max_tokens(messages, ctx_limit, 4096)
+
+        try:
+            client = OpenAI(
+                base_url=NVIDIA_BASE_URL,
+                api_key=api_key,
+            )
+            temperature = info.get("temperature", 0.2)
+            top_p = info.get("top_p", 0.7)
+
+            completion = client.chat.completions.create(
+                model=nvidia_model_id,
+                messages=messages,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tok,
+                stream=True,
+            )
+            for chunk in completion:
+                if not getattr(chunk, "choices", None):
+                    continue
+                delta = chunk.choices[0].delta
+                if delta.content is not None:
+                    yield delta.content
+
+        except Exception as e:
+            err = str(e)
+            if "401" in err or "unauthorized" in err.lower():
+                yield "CLAW_ERROR:BAD_KEY:nvidia|Invalid NVIDIA API key (401). Update it in ⚙ Settings."
+            elif "429" in err or "rate" in err.lower():
+                yield "CLAW_ERROR:RATE_LIMIT:nvidia|NVIDIA rate limit hit. Try again in a moment."
+            elif "404" in err:
+                yield f"CLAW_ERROR:API_ERROR:nvidia|Model not found (404). The model '{nvidia_model_id}' may be unavailable."
+            else:
+                yield f"NVIDIA API error: {err}"
 
     def get_active_model_info(self) -> dict:
         return NVIDIA_MODELS.get(self.model, {})
