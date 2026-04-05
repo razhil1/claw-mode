@@ -36,6 +36,7 @@ async function sendPrompt() {
         const body = {
             prompt: text,
             session_id: NX.sessionId,
+            mode: NX.taskMode || '',
         };
 
         // Include attachments if any
@@ -159,11 +160,7 @@ async function sendPrompt() {
             refreshPreview();
         }
 
-        // Show completion summary
-        if (filesChanged.length > 0) {
-            const summary = `✅ Agent completed — ${filesChanged.length} file(s) modified: ${filesChanged.join(', ')}`;
-            appendSystemMessage(summary);
-        }
+        // Completion summary is now rendered as a done_summary card (agent SSE event)
 
     } catch (e) {
         showToast('Communication error: ' + e.message, 'error');
@@ -281,6 +278,102 @@ function handleStreamEvent(evt, contentDiv) {
                 inner.textContent = evt.text;
             }
         }
+    }
+
+    if (evt.type === 'plan_steps' && evt.steps && evt.steps.length > 0) {
+        // Replace plan-content with an interactive step checklist
+        let planEl = contentDiv.querySelector('.agent-plan');
+        if (!planEl) {
+            planEl = document.createElement('div');
+            planEl.className = 'agent-plan';
+            planEl.innerHTML = `
+                <div class="plan-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                   <i class="fa-solid fa-list-check"></i> Execution Plan
+                   <i class="fa-solid fa-chevron-down toggle-icon"></i>
+                </div>
+                <ol class="plan-step-list"></ol>
+            `;
+            contentDiv.appendChild(planEl);
+        }
+        const list = planEl.querySelector('.plan-step-list') || planEl.querySelector('.plan-content');
+        if (list && list.tagName === 'OL') {
+            list.innerHTML = '';
+            evt.steps.forEach((step, i) => {
+                const li = document.createElement('li');
+                li.className = 'plan-step pending';
+                li.dataset.stepIndex = i;
+                li.innerHTML = `<span class="step-icon"><i class="fa-regular fa-circle"></i></span><span class="step-label">${escapeHtml(step)}</span>`;
+                list.appendChild(li);
+            });
+        }
+        planEl.dataset.stepsCount = evt.steps.length;
+        scrollChat();
+    }
+
+    if (evt.type === 'step_start') {
+        // Activate the matching plan step
+        const li = contentDiv.querySelector(`.plan-step[data-step-index="${evt.index}"]`);
+        if (li) {
+            li.className = 'plan-step active';
+            li.querySelector('.step-icon').innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+        }
+        updateStepBar('Executing', `Step ${evt.index + 1}: ${(evt.label || '').slice(0, 60)}`);
+    }
+
+    if (evt.type === 'step_done') {
+        const li = contentDiv.querySelector(`.plan-step[data-step-index="${evt.index}"]`);
+        if (li) {
+            li.className = 'plan-step done';
+            li.querySelector('.step-icon').innerHTML = '<i class="fa-solid fa-circle-check"></i>';
+        }
+    }
+
+    if (evt.type === 'step_failed') {
+        const li = contentDiv.querySelector(`.plan-step[data-step-index="${evt.index}"]`);
+        if (li) {
+            li.className = 'plan-step failed';
+            li.querySelector('.step-icon').innerHTML = '<i class="fa-solid fa-circle-xmark"></i>';
+            li.title = evt.error || 'Step failed';
+        }
+    }
+
+    if (evt.type === 'done_summary') {
+        // Render a collapsible completion summary card
+        const card = document.createElement('div');
+        card.className = 'agent-done-summary';
+        const filesHtml = (evt.files_changed || []).length > 0
+            ? `<div class="ds-section"><div class="ds-section-title"><i class="fa-solid fa-file-pen"></i> Files Changed</div><ul class="ds-file-list">${(evt.files_changed || []).map(f => `<li><code>${escapeHtml(f)}</code></li>`).join('')}</ul></div>`
+            : '';
+        const cmdsHtml = (evt.commands_run || []).length > 0
+            ? `<div class="ds-section"><div class="ds-section-title"><i class="fa-solid fa-terminal"></i> Commands Run</div><ul class="ds-cmd-list">${(evt.commands_run || []).map(c => `<li><code>${escapeHtml(c.slice(0, 80))}</code></li>`).join('')}</ul></div>`
+            : '';
+        const stepsHtml = evt.steps_total > 0
+            ? `<div class="ds-stat"><i class="fa-solid fa-check-double"></i> ${evt.steps_done}/${evt.steps_total} steps completed</div>`
+            : '';
+        const turnsHtml = `<div class="ds-stat"><i class="fa-solid fa-rotate"></i> ${evt.turns} turn${evt.turns !== 1 ? 's' : ''}</div>`;
+        const modeHtml = evt.mode ? `<div class="ds-stat"><i class="fa-solid fa-tag"></i> Mode: ${escapeHtml(evt.mode)}</div>` : '';
+
+        card.innerHTML = `
+            <div class="ds-header" onclick="this.parentElement.classList.toggle('collapsed')">
+                <i class="fa-solid fa-circle-check"></i> Task Complete
+                <div class="ds-stats-row">${turnsHtml}${stepsHtml}${modeHtml}</div>
+                <i class="fa-solid fa-chevron-down ds-toggle-icon"></i>
+            </div>
+            <div class="ds-body">
+                ${filesHtml}
+                ${cmdsHtml}
+                ${(evt.files_changed || []).length === 0 && (evt.commands_run || []).length === 0 ? '<div class="ds-empty">No files modified.</div>' : ''}
+            </div>
+        `;
+        // Append after the whole message-wrap, not inside it
+        const msgWrap = contentDiv.closest('.message-wrap') || contentDiv.parentElement;
+        const chatContainer = document.getElementById('chatMessages');
+        if (chatContainer) {
+            chatContainer.appendChild(card);
+        } else {
+            msgWrap.parentElement.insertBefore(card, msgWrap.nextSibling);
+        }
+        scrollChat();
     }
 
     if (evt.type === 'tool_call') {
@@ -579,6 +672,40 @@ function setAgentMode(mode) {
     });
     showToast(`Agent mode: ${mode}`, 'info');
 }
+
+// ─── Task Mode Selector ──────────────────────────────────────────────────────
+function setTaskMode(mode, btn) {
+    NX.taskMode = mode;
+    localStorage.setItem('nexus_task_mode', mode);
+    // Update all buttons
+    document.querySelectorAll('.task-mode-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    // Update textarea placeholder
+    const ta = document.getElementById('chatPrompt');
+    if (ta) {
+        const hints = {
+            '':           'Describe what to build, ask a question, or say \'@filename\' to reference a file\u2026',
+            'builder':    '\uD83C\uDFD7\uFE0F Builder mode — describe what to create or add\u2026',
+            'debugger':   '\uD83D\uDD0D Debugger mode — describe the bug or paste error output\u2026',
+            'refactorer': '\u267B\uFE0F Refactorer mode — describe what to clean up or improve\u2026',
+            'researcher': '\uD83D\uDCDA Researcher mode — ask a question about the codebase\u2026',
+            'reviewer':   '\uD83D\uDC41\uFE0F Reviewer mode — ask for a code review or audit\u2026',
+        };
+        ta.placeholder = hints[mode] || hints[''];
+    }
+    const labels = { '': 'Auto', builder: 'Builder', debugger: 'Debugger', refactorer: 'Refactorer', researcher: 'Researcher', reviewer: 'Reviewer' };
+    if (mode) showToast(`Task mode: ${labels[mode] || mode}`, 'info');
+}
+
+// ─── Restore saved task mode on page load ────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function restoreTaskMode() {
+    const saved = NX.taskMode;
+    if (saved) {
+        const btn = document.querySelector(`.task-mode-btn[data-mode="${saved}"]`);
+        if (btn) setTaskMode(saved, btn);
+    }
+});
 
 // ─── Ultra Mode ──────────────────────────────────────────────────────────────
 async function toggleUltraMode() {

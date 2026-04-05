@@ -912,6 +912,7 @@ def chat_stream() -> Response:
     data       = request.json or {}
     prompt     = data.get("prompt", "").strip()
     session_id = data.get("session_id", "default")
+    mode_override = data.get("mode", "").strip()
 
     if not prompt:
         return _error("'prompt' is required", code="NO_PROMPT")
@@ -925,7 +926,14 @@ def chat_stream() -> Response:
 
     def run_agent() -> None:
         try:
-            for event in agent.run_streaming(prompt):
+            # Pass mode override to ClawAgent (UltraWorker ignores it, uses its own routing)
+            stream_kwargs = {}
+            if hasattr(agent, "run_streaming") and mode_override:
+                import inspect
+                sig = inspect.signature(agent.run_streaming)
+                if "mode_override" in sig.parameters:
+                    stream_kwargs["mode_override"] = mode_override
+            for event in agent.run_streaming(prompt, **stream_kwargs):
                 seq[0] += 1
                 event["seq"] = seq[0]
                 event_queue.append(event)

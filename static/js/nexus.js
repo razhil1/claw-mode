@@ -48,6 +48,7 @@ const NX = {
     rightPanelVisible: true,
     layouts: ['default', 'split', 'zen'],
     layoutIdx: 0,
+    taskMode: localStorage.getItem('nexus_task_mode') || '',
 };
 
 if (!localStorage.getItem('nexus_session_id')) {

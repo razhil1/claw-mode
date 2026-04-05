@@ -854,7 +854,7 @@ class ClawAgent:
 
     # ── main streaming loop ───────────────────────────────────────────────────
 
-    def run_streaming(self, user_prompt: str) -> Generator[dict, None, None]:  # noqa: C901
+    def run_streaming(self, user_prompt: str, mode_override: str = "") -> Generator[dict, None, None]:  # noqa: C901
         """
         Yield SSE event dicts describing every step of the agentic loop.
         See class docstring for the full event schema reference.
@@ -862,7 +862,7 @@ class ClawAgent:
         self.clear_stop()
 
         llm        = LLMClient(model=self.model)
-        mode       = detect_mode(user_prompt)
+        mode       = mode_override if mode_override else detect_mode(user_prompt)
         messages   = self._build_messages(user_prompt, mode=mode)
         registry   = RollbackRegistry()
         tracker    = ChangeTracker()
@@ -873,6 +873,9 @@ class ClawAgent:
         full_content:      list[str] = []
         consecutive_errors: int      = 0
         total_turns:        int      = 0
+        plan_steps:        list[str] = []
+        step_index:        int       = 0
+        commands_run:      list[str] = []
 
         # Emit mode event so the UI can display the active specialist mode
         if mode and mode in TASK_MODES:
@@ -960,6 +963,12 @@ class ClawAgent:
                 plan = _extract_plan(response_text)
                 if plan:
                     yield {"type": "plan", "text": plan}
+                    # Parse numbered steps from plan text for tracking
+                    steps = re.findall(r"^\s*\d+[\.\)]\s+(.+)$", plan, re.MULTILINE)
+                    if steps:
+                        plan_steps.clear()
+                        plan_steps.extend(steps)
+                        yield {"type": "plan_steps", "steps": plan_steps}
 
             # ── emit clean prose ──────────────────────────────────────────────
             clean_prose = _strip_tool_lines(response_text)
@@ -995,6 +1004,19 @@ class ClawAgent:
             # Pre-snapshot + pre-track
             self._snapshot_if_write(tool_name, payload, registry)
             self._pretrack(tool_name, payload, tracker)
+
+            # Emit step_start if we have a plan step for this index
+            if plan_steps and step_index < len(plan_steps):
+                yield {
+                    "type":  "step_start",
+                    "index": step_index,
+                    "label": plan_steps[step_index],
+                    "tool":  tool_name,
+                }
+
+            # Track bash commands
+            if tool_name == "BashTool":
+                commands_run.append(payload[:120])
 
             yield {"type": "tool_call", "tool": tool_name, "payload": payload[:400]}
 
@@ -1045,14 +1067,34 @@ class ClawAgent:
             # Post-track after write completes
             self._posttrack(tool_name, payload, tracker)
 
+            tool_success = not _is_error(result)
             yield {
                 "type":    "tool_result",
                 "tool":    tool_name,
                 "result":  result[:RESULT_TRIM_CHARS],
                 "elapsed": elapsed,
-                "success": not _is_error(result),
+                "success": tool_success,
                 "attempt": attempt,
             }
+
+            # Emit step_done or step_failed for the tracked plan step
+            if plan_steps and step_index < len(plan_steps):
+                if tool_success:
+                    yield {
+                        "type":  "step_done",
+                        "index": step_index,
+                        "label": plan_steps[step_index],
+                    }
+                else:
+                    yield {
+                        "type":    "step_failed",
+                        "index":   step_index,
+                        "label":   plan_steps[step_index],
+                        "error":   result[:200],
+                        "attempt": attempt,
+                    }
+                if tool_success or attempt >= MAX_RETRIES:
+                    step_index += 1
 
             # Error accounting
             if _is_error(result):
@@ -1092,11 +1134,24 @@ class ClawAgent:
             self.history = self.history[-(MAX_HISTORY_PAIRS * 2):]
 
         if not self._stop_event.is_set():
+            files_changed = tracker.modified_paths()
+            file_diffs    = tracker.summaries()
             yield {
                 "type":               "done",
                 "turns":              total_turns,
-                "files_changed":      tracker.modified_paths(),
-                "file_diffs":         tracker.summaries(),
+                "files_changed":      files_changed,
+                "file_diffs":         file_diffs,
                 "history_len":        len(self.history) // 2,
                 "rollback_available": registry.has_snapshots,
+            }
+            # Emit a structured done_summary event for the UI summary card
+            yield {
+                "type":          "done_summary",
+                "turns":         total_turns,
+                "files_changed": files_changed,
+                "file_diffs":    file_diffs,
+                "commands_run":  commands_run,
+                "steps_total":   len(plan_steps),
+                "steps_done":    step_index,
+                "mode":          mode,
             }

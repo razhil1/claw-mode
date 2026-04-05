@@ -1073,7 +1073,10 @@ class UltraWorker:
 
         yield {"type": "thinking", "text": f"⚡ UltraWorker v4 — {lang} workspace · task={state.task_class}"}
 
-        full_content: list[str] = []
+        full_content:  list[str] = []
+        plan_steps:    list[str] = []
+        step_index:    int       = 0
+        commands_run:  list[str] = []
 
         for turn in range(MAX_TURNS):
             if self._stop.is_set():
@@ -1136,6 +1139,11 @@ class UltraWorker:
                 plan = extract_plan(response)
                 if plan:
                     yield {"type": "plan", "text": plan}
+                    steps = re.findall(r"^\s*\d+[\.\)]\s+(.+)$", plan, re.MULTILINE)
+                    if steps:
+                        plan_steps.clear()
+                        plan_steps.extend(steps)
+                        yield {"type": "plan_steps", "steps": plan_steps}
 
             # ── parse tools ───────────────────────────────────────────────────
             calls = parse_tools(response)
@@ -1204,6 +1212,19 @@ class UltraWorker:
                     yield {"type": "loop_warn", "text": hint}
                     ctx._raw.append({"role": "user", "content": f"[System Warning] {hint}"})
                     continue
+
+                # Emit step_start if we have a tracked plan step
+                if plan_steps and step_index < len(plan_steps):
+                    yield {
+                        "type":  "step_start",
+                        "index": step_index,
+                        "label": plan_steps[step_index],
+                        "tool":  tool,
+                    }
+
+                # Track bash commands
+                if tool == "BashTool":
+                    commands_run.append(payload[:120])
 
                 yield {"type": "tool_call", "tool": tool, "payload": payload[:400]}
 
@@ -1279,6 +1300,24 @@ class UltraWorker:
                     "success": tr.success,
                     "attempt": tr.attempt,
                 }
+                # Emit step_done / step_failed for tracked plan step
+                if plan_steps and step_index < len(plan_steps):
+                    if tr.success:
+                        yield {
+                            "type":  "step_done",
+                            "index": step_index,
+                            "label": plan_steps[step_index],
+                        }
+                    else:
+                        yield {
+                            "type":    "step_failed",
+                            "index":   step_index,
+                            "label":   plan_steps[step_index],
+                            "error":   tr.output[:200],
+                            "attempt": tr.attempt,
+                        }
+                    if tr.success or tr.attempt >= MAX_RETRIES:
+                        step_index += 1
                 hint = state.record(tr)
                 if hint:
                     yield {"type": "recovery", "message": hint}
@@ -1314,14 +1353,28 @@ class UltraWorker:
             self.history = self.history[-60:]
 
         if not self._stop.is_set():
+            files_changed = state.files_changed
+            file_diffs    = tracker.summaries()
             yield {
                 "type":          "done",
                 "turns":         state.total_turns,
-                "files_changed": state.files_changed,
-                "file_diffs":    tracker.summaries(),
+                "files_changed": files_changed,
+                "file_diffs":    file_diffs,
                 "tools_used":    state.total_tools_used,
                 "lang":          state.lang,
                 "history_len":   len(self.history) // 2,
+            }
+            # Emit structured done_summary for UI summary card
+            yield {
+                "type":          "done_summary",
+                "turns":         state.total_turns,
+                "files_changed": files_changed,
+                "file_diffs":    file_diffs,
+                "commands_run":  commands_run,
+                "steps_total":   len(plan_steps),
+                "steps_done":    step_index,
+                "lang":          state.lang,
+                "mode":          "ultra",
             }
 
 

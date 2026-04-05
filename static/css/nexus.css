@@ -3625,6 +3625,7 @@ updating::before {
     gap: 2px;
     padding: 5px 6px;
     border-bottom: 1px solid var(--border-dim);
+    flex-wrap: wrap;
 }
 
 .input-tool-btn {

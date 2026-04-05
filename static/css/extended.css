@@ -624,3 +624,186 @@
 .text-red { color: var(--red, #f85149); }
 .text-amber { color: var(--amber, #d29922); }
 
+/* ════════════════════════════════════════════════════════════
+   TASK MODE SELECTOR
+════════════════════════════════════════════════════════════ */
+.task-mode-selector {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--bg-elevated, #161b22);
+    border: 1px solid var(--border, #30363d);
+    border-radius: 8px;
+    padding: 2px;
+}
+
+.task-mode-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 7px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted, #8b949e);
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.task-mode-btn:hover {
+    background: var(--bg-hover, rgba(88,166,255,0.08));
+    color: var(--text, #e6edf3);
+}
+
+.task-mode-btn.active {
+    background: rgba(88,166,255,0.15);
+    color: var(--blue, #58a6ff);
+    font-weight: 600;
+}
+
+.task-mode-btn i { font-size: 10px; }
+
+/* ════════════════════════════════════════════════════════════
+   PLAN STEP CHECKLIST
+════════════════════════════════════════════════════════════ */
+.plan-step-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 4px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.plan-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-sub, #8b949e);
+    transition: background 0.15s, color 0.15s;
+}
+
+.plan-step.pending  { color: var(--text-muted, #8b949e); }
+.plan-step.active   { color: var(--blue, #58a6ff); background: rgba(88,166,255,0.06); font-weight: 500; }
+.plan-step.done     { color: var(--green, #3fb950); }
+.plan-step.failed   { color: var(--red, #f85149); }
+
+.plan-step .step-icon {
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+    font-size: 13px;
+}
+
+.plan-step.pending  .step-icon { color: var(--text-muted, #6e7681); }
+.plan-step.active   .step-icon { color: var(--blue, #58a6ff); }
+.plan-step.done     .step-icon { color: var(--green, #3fb950); }
+.plan-step.failed   .step-icon { color: var(--red, #f85149); }
+
+.plan-step .step-label { flex: 1; line-height: 1.4; }
+
+/* ════════════════════════════════════════════════════════════
+   DONE SUMMARY CARD
+════════════════════════════════════════════════════════════ */
+.agent-done-summary {
+    margin-top: 12px;
+    border: 1px solid rgba(63,185,80,0.3);
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(63,185,80,0.04);
+}
+
+.agent-done-summary .ds-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green, #3fb950);
+    cursor: pointer;
+    background: rgba(63,185,80,0.07);
+    user-select: none;
+}
+
+.agent-done-summary .ds-header:hover { background: rgba(63,185,80,0.12); }
+
+.agent-done-summary .ds-stats-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+.agent-done-summary .ds-stat {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted, #8b949e);
+}
+
+.agent-done-summary .ds-toggle-icon {
+    margin-left: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    transition: transform 0.2s;
+}
+
+.agent-done-summary.collapsed .ds-toggle-icon { transform: rotate(-90deg); }
+.agent-done-summary.collapsed .ds-body { display: none; }
+
+.agent-done-summary .ds-body {
+    padding: 10px 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.agent-done-summary .ds-section { }
+
+.agent-done-summary .ds-section-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-sub, #8b949e);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+}
+
+.agent-done-summary .ds-file-list,
+.agent-done-summary .ds-cmd-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.agent-done-summary .ds-file-list li,
+.agent-done-summary .ds-cmd-list li {
+    font-size: 11.5px;
+    color: var(--text, #e6edf3);
+}
+
+.agent-done-summary .ds-file-list code { color: var(--cyan, #79c0ff); font-size: 11px; }
+.agent-done-summary .ds-cmd-list  code { color: var(--text-sub, #8b949e); font-size: 11px; }
+
+.agent-done-summary .ds-empty {
+    font-size: 12px;
+    color: var(--text-muted, #6e7681);
+    font-style: italic;
+}
+

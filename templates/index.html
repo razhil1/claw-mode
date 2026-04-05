@@ -1019,6 +1019,34 @@
                                 <i class="fa-regular fa-image"></i>
                             </button>
                             <div class="input-divider-v"></div>
+                            <!-- Task Mode Selector -->
+                            <div class="task-mode-selector" id="taskModeSelector">
+                                <button class="task-mode-btn active" data-mode="" onclick="setTaskMode('', this)" title="Auto-detect mode">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                    <span>Auto</span>
+                                </button>
+                                <button class="task-mode-btn" data-mode="builder" onclick="setTaskMode('builder', this)" title="Builder — create new features">
+                                    <span>&#127959;</span>
+                                    <span>Build</span>
+                                </button>
+                                <button class="task-mode-btn" data-mode="debugger" onclick="setTaskMode('debugger', this)" title="Debugger — find and fix bugs">
+                                    <span>&#128269;</span>
+                                    <span>Debug</span>
+                                </button>
+                                <button class="task-mode-btn" data-mode="refactorer" onclick="setTaskMode('refactorer', this)" title="Refactorer — improve code quality">
+                                    <span>&#9851;</span>
+                                    <span>Refactor</span>
+                                </button>
+                                <button class="task-mode-btn" data-mode="researcher" onclick="setTaskMode('researcher', this)" title="Researcher — read and explain code">
+                                    <span>&#128218;</span>
+                                    <span>Research</span>
+                                </button>
+                                <button class="task-mode-btn" data-mode="reviewer" onclick="setTaskMode('reviewer', this)" title="Reviewer — audit for bugs and issues">
+                                    <span>&#128065;</span>
+                                    <span>Review</span>
+                                </button>
+                            </div>
+                            <div class="input-divider-v"></div>
                             <!-- Ultra Mode Toggle inside input -->
                             <label class="ultra-toggle-mini" title="Ultra Mode">
                                 <input type="checkbox" id="ultraToggle" onchange="toggleUltraMode()" />
