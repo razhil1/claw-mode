@@ -1139,9 +1139,9 @@ def api_set_key() -> Response:
     os.environ["NVIDIA_API_KEY"] = key
     return _ok(
         message=(
-            "NVIDIA key saved for this session. "
-            "For persistence across restarts, set NVIDIA_API_KEY as a Replit Secret "
-            "in the project settings (Tools → Secrets)."
+            "NVIDIA key saved and will persist across restarts. "
+            "You can also set NVIDIA_API_KEY as a Replit Secret (Tools → Secrets) "
+            "to override it at the environment level."
         )
     )
 
@@ -1526,12 +1526,14 @@ def db_query() -> Response:
     if not sql:
         return _error("'query' is required", code="NO_QUERY")
 
-    # Safety: only allow SELECT / PRAGMA / EXPLAIN in the API (writes go through agent)
+    # Safety: only allow read-only statements in the DB Explorer API.
+    # WITH is excluded because writable CTEs (WITH ... AS (INSERT/UPDATE/DELETE ...))
+    # can execute mutations while looking like a SELECT to a naive first-word check.
     first_word = sql.split()[0].upper()
-    if first_word not in ("SELECT", "PRAGMA", "EXPLAIN", "WITH", "SHOW", "DESCRIBE", "DESC"):
+    if first_word not in ("SELECT", "PRAGMA", "EXPLAIN", "SHOW", "DESCRIBE", "DESC"):
         return _error(
-            "Only SELECT / PRAGMA / EXPLAIN queries are allowed via the DB Explorer. "
-            "Use the agent to modify data.",
+            "Only SELECT / PRAGMA / EXPLAIN / SHOW / DESCRIBE queries are allowed "
+            "via the DB Explorer. Use the agent to modify data.",
             code="WRITE_NOT_ALLOWED",
         )
 
