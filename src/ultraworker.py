@@ -1096,11 +1096,15 @@ class UltraWorker:
         """
         self.clear_stop()
 
-        # Import here to avoid circular; _MODE_POLICIES lives in agent.py
-        from .agent import _MODE_POLICIES
-        _policy    = _MODE_POLICIES.get(mode_override, {})
+        # Import here to avoid circular; _MODE_POLICIES + VALID_MODES live in agent.py
+        from .agent import _MODE_POLICIES, VALID_MODES
+        # Validate mode_override against canonical allowed keys
+        _mode = mode_override if mode_override in VALID_MODES else ""
+        _policy    = _MODE_POLICIES.get(_mode, {})
         _max_turns = _policy.get("max_turns", MAX_TURNS)
         _read_only = _policy.get("read_only", False)
+        # Rebind so local references use the validated value
+        mode_override = _mode
 
         root     = self._root()
         lang     = detect_language(root)
@@ -1115,6 +1119,18 @@ class UltraWorker:
         _pref_model = _policy.get("preferred_model", None)
 
         yield {"type": "thinking", "text": f"⚡ UltraWorker v4 — {lang} workspace · mode={mode_override or 'auto'} · task={state.task_class}"}
+
+        # Emit a unified mode event so the UI status bar shows the active specialist mode
+        if mode_override:
+            from .agent import TASK_MODES
+            mode_info = TASK_MODES.get(mode_override, {})
+            yield {
+                "type":  "mode",
+                "mode":  mode_override,
+                "label": mode_info.get("label", mode_override.title()),
+                "emoji": mode_info.get("emoji", ""),
+                "desc":  mode_info.get("desc", ""),
+            }
 
         full_content:       list[str] = []
         plan_steps:         list[str] = []

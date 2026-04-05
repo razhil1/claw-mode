@@ -61,6 +61,12 @@ RESULT_TRIM_CHARS      = 2_500 # Tool output trimmed to this in history
 # TASK MODES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Canonical set of allowed specialist mode keys.
+# Used to validate mode_override inputs across all agents.
+VALID_MODES: frozenset[str] = frozenset(
+    {"builder", "debugger", "refactorer", "researcher", "reviewer"}
+)
+
 TASK_MODES: dict[str, dict] = {
     "builder": {
         "emoji":   "🏗",
@@ -95,11 +101,12 @@ TASK_MODES: dict[str, dict] = {
 }
 
 # Per-mode execution policies — full contract per specialist mode:
-#   max_turns    : hard ceiling on agent iterations
-#   turn_type    : routing key passed to LLMClient.route() for model selection
+#   max_turns       : hard ceiling on agent iterations
+#   turn_type       : routing key passed to LLMClient.route() for model selection
 #   preferred_model : preferred NVIDIA model key (None = use configured model)
-#   tool_priority   : ordered list of highest-priority tools for this mode
-#   read_only    : when True, write/exec tools are blocked
+#   tool_priority   : ordered guidance list for the mode's system-prompt addendum
+#                     (INFORMATIONAL — surfaced in prompt/docs, not enforced in execution)
+#   read_only       : when True, write/exec tools are blocked at execution time
 _MODE_POLICIES: dict[str, dict] = {
     "builder": {
         "max_turns":       40,
@@ -910,7 +917,8 @@ class ClawAgent:
         """
         self.clear_stop()
 
-        mode       = mode_override if mode_override else detect_mode(user_prompt)
+        # Validate mode_override against canonical allowed keys
+        mode       = mode_override if mode_override in VALID_MODES else detect_mode(user_prompt)
         # Use mode-preferred model when running under a specialist mode
         _mode_pol  = _MODE_POLICIES.get(mode, {})
         _pref_model = _mode_pol.get("preferred_model", self.model)
