@@ -145,7 +145,7 @@ MODELS: dict[str, tuple[str, int]] = {
     "router":       ("meta/llama-3.1-8b-instruct",               128_000),
     "thinker":      ("deepseek-ai/deepseek-r1-distill-llama-70b", 128_000),
     "coder":        ("qwen/qwen2.5-coder-32b-instruct",            32_768),
-    "coder_heavy":  ("mistralai/mistral-small-24b-instruct-2501",   32_768),
+    "coder_heavy":  ("mistralai/mistral-small-4-119b-2603",          32_768),
     "fast":         ("meta/llama-3.1-8b-instruct",               128_000),
     "balanced":     ("meta/llama-3.3-70b-instruct",              128_000),
     "powerful":     ("nvidia/llama-3.3-nemotron-super-49b-v1",    32_768),
@@ -304,6 +304,8 @@ SPECIALIST_ROLES: dict[str, dict] = {
         "nvidia_model": "thinker",
     },
 }
+
+AGENT_ROLES = SPECIALIST_ROLES
 
 
 # ══════════════════════════════════════════════════════════════════════════════
