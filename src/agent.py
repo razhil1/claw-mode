@@ -178,15 +178,16 @@ something, you deliver complete, working, deployable code. You understand:
 • User intent — what they actually need, not just what they literally said
 
 ━━━ HOW YOU OPERATE ━━━
-1. ORIENT: List workspace, read .memory.md if it exists, scan relevant files.
-2. PLAN: Output a numbered plan (max 8 steps). Format:
+1. PLAN (turn 0 only): Read .memory.md if it exists, scan workspace, then output:
    PLAN:
    1. [STEP] <action>
    Approach: <why this strategy>
-3. EXECUTE: One tool call per turn. Interpret every result with a → line.
-4. VERIFY: Run tests/lint/syntax check. Fix issues immediately.
-5. UPDATE: Write .memory.md with project state for next session.
-6. DONE: Summary, files changed, verification result, next steps.
+2. EXECUTE: Follow your plan step by step. One tool call per turn.
+   After each tool result, proceed IMMEDIATELY to the NEXT step.
+   Do NOT re-read the workspace, re-plan, or repeat earlier steps.
+   Do NOT go back to the top. Move FORWARD through the plan.
+3. VERIFY: After the last step, run a syntax check or test.
+4. DONE: Output a clean summary (see COMPLETION FORMAT below).
 
 ━━━ HOW YOU CODE ━━━
 • Write COMPLETE implementations. Every function body filled. Every import resolved.
@@ -279,8 +280,32 @@ You are SANDBOXED inside 'agent_workspace/'. NEVER access IDE system files \
 BashTool runs with cwd=agent_workspace/.
 
 ━━━ SESSION MEMORY ━━━
-• If .memory.md exists, read it first — it has project context.
-• Before DONE, update .memory.md with what exists, what changed, user preferences.
+• If .memory.md exists, read it on turn 0 for context.
+• After completing work, silently update .memory.md via FileEditTool.
+• Do NOT output memory contents, context summaries, or workspace trees in your \
+response to the user. Keep your final output clean.
+
+━━━ COMPLETION FORMAT ━━━
+When finished, end with a DONE: block. Keep it concise and professional:
+DONE:
+Summary: <1-2 sentence description of what was accomplished>
+Files: <comma-separated list of files created or modified>
+Verified: <yes/no — whether you ran a syntax check or test>
+
+Do NOT include:
+• Raw file contents or code blocks in the DONE message
+• Workspace trees, context dumps, or .memory.md contents
+• Long explanations — the code speaks for itself
+
+━━━ SEQUENTIAL EXECUTION (CRITICAL) ━━━
+After each tool result:
+1. Read the result
+2. Write one brief "→" interpretation line
+3. Immediately proceed to the NEXT step in your plan
+4. Issue the next TOOL: call
+
+NEVER: Re-list the workspace. Re-read files you already read. Re-output the plan. \
+Repeat orientation steps. Output filler text between steps. Go back to step 1.
 
 ━━━ SAFETY ━━━
 • Never delete files unless explicitly instructed.
@@ -1347,7 +1372,7 @@ class ClawAgent:
             # ── completion check ──────────────────────────────────────────────
             if _detect_done(response_text) and not _parse_first_tool_call(response_text):
                 missing = _validate_done_claims(response_text, tracker)
-                if missing and turn < max_turns - 2:
+                if missing and turn < _max_turns - 2:
                     rejection = (
                         f"[System] DONE rejected. You claimed to create/modify these files "
                         f"but they do NOT exist in the workspace: {', '.join(missing)}\n"
@@ -1366,7 +1391,7 @@ class ClawAgent:
             tool_calls = _parse_all_tool_calls(response_text)
             if not tool_calls:
                 no_tool_nudges = getattr(self, '_no_tool_nudges', 0)
-                if no_tool_nudges < 2 and turn < max_turns - 2:
+                if no_tool_nudges < 2 and turn < _max_turns - 2:
                     self._no_tool_nudges = no_tool_nudges + 1
                     nudge = (
                         "[System] You wrote a plan or code but did NOT call any tools. "
@@ -1516,11 +1541,16 @@ class ClawAgent:
             else:
                 consecutive_errors = max(0, consecutive_errors - 1)
 
-            # Append to messages
+            # Append to messages with progress hint
             messages.append({"role": "assistant", "content": response_text.strip() or "(empty)"})
+            progress_hint = ""
+            if plan_steps and step_index < len(plan_steps):
+                progress_hint = f"\n[Progress: step {step_index + 1}/{len(plan_steps)} — next: {plan_steps[step_index]}. Proceed immediately.]"
+            elif plan_steps and step_index >= len(plan_steps):
+                progress_hint = "\n[All plan steps complete. Verify your work, then output DONE:]"
             messages.append({
                 "role":    "user",
-                "content": f"[Tool Result — {tool_name}]\n{result}",
+                "content": f"[Tool Result — {tool_name}]\n{result}{progress_hint}",
             })
             full_content.append(response_text)
             full_content.append(f"[{tool_name}] → {result[:400]}")

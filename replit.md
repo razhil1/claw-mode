@@ -19,6 +19,12 @@ An AI-powered coding assistant and IDE built with Flask. Provides a web-based in
 2. **Ultra** (UltraWorker): 40-turn deep reasoning loop with phased execution. Model tiers: Frontier (DeepSeek R1 70B for reasoning), Smart (Qwen 2.5 Coder 32B for implementation), Fast (Phi-4 Mini for quick tasks).
 3. **Swarm** (Multi-agent): Parallel specialist agents with task decomposition. Includes dependency-aware decomposition prompt to prevent file conflicts between agents.
 
+## Agent Behaviour
+
+- **Sequential execution**: After planning, agents proceed step-by-step through their plan without re-orienting or re-planning. Progress hints (`[Progress: step N/M — next: ...]`) are injected into tool results to keep the agent moving forward.
+- **Professional completion**: DONE blocks follow a structured format (Summary/Files/Verified). Context dumps, workspace trees, and memory contents are explicitly suppressed from output.
+- **File explorer**: `_SKIP_DIRS` only hides build artifacts (node_modules, __pycache__, .git, etc.). IDE system dirs (src, static, templates) are only hidden if the workspace is the IDE root itself — user project folders with these names are always shown.
+
 ## Running the App
 
 ```bash

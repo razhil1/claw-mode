@@ -333,12 +333,16 @@ Before writing any code, reason through these in a <thought> block:
 • When building backends: connection pooling, proper async, input sanitisation.
 
 ━━━ HOW YOU OPERATE ━━━
-1. PLAN: Output a numbered plan on turn 0. Max 8 steps. Each step = one action.
-   Format: PLAN:\n1. [STEP] <action>\nApproach: <why this strategy>
-2. EXECUTE: Follow the plan. One tool call per turn. Interpret every result.
-   After each tool: write one → line explaining the outcome.
-3. VERIFY: After main work, run tests/lint/syntax check. Fix issues immediately.
-4. COMPLETE: End with DONE: block — summary, files changed, verification result.
+1. PLAN (turn 0 only): Read .memory.md if it exists, scan workspace, then output:
+   PLAN:
+   1. [STEP] <action>
+   Approach: <why this strategy>
+2. EXECUTE: Follow your plan step by step. One tool call per turn.
+   After each tool result, proceed IMMEDIATELY to the NEXT step.
+   Do NOT re-read the workspace, re-plan, or repeat earlier steps.
+   Do NOT go back to the top. Move FORWARD through the plan.
+3. VERIFY: After the last step, run a syntax check or test.
+4. DONE: Output a clean summary (see COMPLETION FORMAT below).
 
 ━━━ TOOL REFERENCE ━━━
 TOOL: ListDirTool       | <path>
@@ -417,8 +421,32 @@ Users often describe what they want imprecisely. Your job is to infer intent:
 Always deliver more than the minimum. Anticipate what they'll need next.
 
 ━━━ SESSION MEMORY ━━━
-• If .memory.md exists, read it first — it has project context from past sessions.
-• Before DONE, update .memory.md with: what exists, what changed, user preferences.
+• If .memory.md exists, read it on turn 0 for context.
+• After completing work, silently update .memory.md via FileEditTool.
+• Do NOT output memory contents, context summaries, or workspace trees in your \
+response to the user. Keep your final output clean.
+
+━━━ COMPLETION FORMAT ━━━
+When finished, end with a DONE: block. Keep it concise and professional:
+DONE:
+Summary: <1-2 sentence description of what was accomplished>
+Files: <comma-separated list of files created or modified>
+Verified: <yes/no — whether you ran a syntax check or test>
+
+Do NOT include:
+• Raw file contents or code blocks in the DONE message
+• Workspace trees, context dumps, or .memory.md contents
+• Long explanations — the code speaks for itself
+
+━━━ SEQUENTIAL EXECUTION (CRITICAL) ━━━
+After each tool result:
+1. Read the result
+2. Write one brief "→" interpretation line
+3. Immediately proceed to the NEXT step in your plan
+4. Issue the next TOOL: call
+
+NEVER: Re-list the workspace. Re-read files you already read. Re-output the plan. \
+Repeat orientation steps. Output filler text between steps. Go back to step 1.
 
 ━━━ SAFETY ━━━
 • Never delete files unless explicitly instructed.
@@ -1439,7 +1467,7 @@ class UltraWorker:
             if not calls:
                 if detect_done(response):
                     missing = _validate_done_claims_uw(response, root)
-                    if missing and turn < max_turns - 2:
+                    if missing and turn < _max_turns - 2:
                         nudge = (
                             f"[System] DONE rejected. These files were claimed but do NOT exist: "
                             f"{', '.join(missing)}\n"
@@ -1452,7 +1480,7 @@ class UltraWorker:
                         full_content.append(response)
                         continue
 
-                if not detect_done(response) and self._no_tool_nudges < 2 and turn < max_turns - 2:
+                if not detect_done(response) and self._no_tool_nudges < 2 and turn < _max_turns - 2:
                     self._no_tool_nudges += 1
                     nudge = (
                         "[System] You wrote text but did NOT call any tools. "
@@ -1699,13 +1727,23 @@ class UltraWorker:
                 if all_ok or final_attempt >= MAX_RETRIES:
                     step_index += 1
 
-            # ── update context + optional compression ─────────────────────────
+            # ── update context + progress hint ─────────────────────────────────
+            progress_hint = ""
+            if plan_steps and step_index < len(plan_steps):
+                progress_hint = f"\n[Progress: step {step_index + 1}/{len(plan_steps)} — next: {plan_steps[step_index]}. Proceed immediately.]"
+            elif plan_steps and step_index >= len(plan_steps):
+                progress_hint = "\n[All plan steps complete. Verify your work, then output DONE:]"
+
+            turn_results = [_compress(r.output) for r in results]
+            if progress_hint and turn_results:
+                turn_results[-1] += progress_hint
+
             ctx.add_turn(TurnRecord(
                 turn_num  = turn + 1,
                 phase     = state.current_phase.value,
                 assistant = response.strip() or "(empty)",
                 tools     = [t for t, _ in calls],
-                results   = [_compress(r.output) for r in results],
+                results   = turn_results,
             ))
             full_content.append(response)
 
