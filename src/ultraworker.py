@@ -46,8 +46,14 @@ from .toolbox import (
     tool_file_edit,
     tool_file_patch,
     tool_file_delete,
+    tool_file_move,
+    tool_file_copy,
+    tool_file_info,
     tool_list_dir,
+    tool_tree,
     tool_search,
+    tool_grep,
+    tool_glob,
     tool_view_file_lines,
     tool_workspace_zip,
     tool_workspace_unzip,
@@ -346,13 +352,19 @@ Before writing any code, reason through these in a <thought> block:
 
 ━━━ TOOL REFERENCE ━━━
 TOOL: ListDirTool       | <path>
+TOOL: TreeTool          | <path> ::: <max_depth>
 TOOL: FileReadTool      | <path>
 TOOL: FileEditTool      | <path> ::: <complete_file_content>
 TOOL: FilePatchTool     | <path> ::: <exact_old_block> === <new_block>
+TOOL: FileDeleteTool    | <path>
+TOOL: FileMoveTool      | <source_path> ::: <destination_path>
+TOOL: FileCopyTool      | <source_path> ::: <destination_path>
+TOOL: FileInfoTool      | <path>
 TOOL: BashTool          | <shell_command>
 TOOL: SearchTool        | <path> ::: <regex>
+TOOL: GrepTool          | <path> ::: <regex_pattern>
+TOOL: GlobTool          | <glob_pattern>
 TOOL: ViewLinesTool     | <path> ::: <start>,<end>
-TOOL: FileDeleteTool    | <path>
 TOOL: ThinkTool         | <reasoning>
 TOOL: LintTool          | <path>
 TOOL: FormatTool        | <path>
@@ -722,8 +734,10 @@ _PARAM_STRIP = re.compile(
 )
 
 _KNOWN_TOOLS = {
-    "ListDirTool", "FileReadTool", "ViewLinesTool", "SearchTool",
+    "ListDirTool", "TreeTool", "FileReadTool", "ViewLinesTool", "SearchTool",
+    "GrepTool", "GlobTool",
     "FileEditTool", "FilePatchTool", "FileDeleteTool",
+    "FileMoveTool", "FileCopyTool", "FileInfoTool",
     "BashTool", "ThinkTool",
     "LintTool", "FormatTool", "TestRunTool", "DepsInstall", "GitTool",
     "WorkspaceZipTool", "WorkspaceUnzipTool",
@@ -816,8 +830,44 @@ def execute_tool(tool: str, raw: str, root: Path) -> ToolResult:
             out   = tool_search(parts[0].strip(), parts[1].strip()) if len(parts) == 2 \
                     else tool_search(".", payload)
 
+        elif tool == "TreeTool":
+            parts = payload.split(":::", 1)
+            path = parts[0].strip() if parts[0].strip() else "."
+            depth = 4
+            if len(parts) > 1:
+                try: depth = int(parts[1].strip())
+                except ValueError: pass
+            out = tool_tree(path, depth)
+
+        elif tool == "GrepTool":
+            parts = payload.split(":::", 1)
+            if len(parts) == 2:
+                out = tool_grep(parts[0].strip(), parts[1].strip())
+            else:
+                out = tool_grep(".", payload)
+
+        elif tool == "GlobTool":
+            out = tool_glob(payload.strip())
+
+        elif tool == "FileInfoTool":
+            out = tool_file_info(payload.strip())
+
         elif tool == "FileDeleteTool":
             out = tool_file_delete(payload)
+
+        elif tool == "FileMoveTool":
+            parts = payload.split(":::", 1)
+            if len(parts) == 2:
+                out = tool_file_move(parts[0].strip(), parts[1].strip())
+            else:
+                out = "Error: FileMoveTool requires 'source ::: destination'."; ok = False
+
+        elif tool == "FileCopyTool":
+            parts = payload.split(":::", 1)
+            if len(parts) == 2:
+                out = tool_file_copy(parts[0].strip(), parts[1].strip())
+            else:
+                out = "Error: FileCopyTool requires 'source ::: destination'."; ok = False
 
         # ── write ─────────────────────────────────────────────────────────────
         elif tool == "FileEditTool":

@@ -353,24 +353,157 @@ async function newSession() {
 }
 
 /* ========= UI SHELL MOCKS ========= */
-function showCommandPalette() { document.getElementById('cmdPaletteOverlay').style.display = 'flex'; document.getElementById('cmdInput').focus(); }
-function hideCommandPalette() { document.getElementById('cmdPaletteOverlay').style.display = 'none'; }
-function filterCommands(val) {}
-function cmdKeyNav(e) {}
+const _CMD_REGISTRY = [
+    { label: 'New File',              icon: 'fa-solid fa-file-circle-plus',  action: () => showNewFileDialog() },
+    { label: 'New Folder',            icon: 'fa-solid fa-folder-plus',       action: () => document.getElementById('newFolderModal').style.display = 'flex' },
+    { label: 'Save File',             icon: 'fa-solid fa-floppy-disk',       action: () => saveCurrentFile() },
+    { label: 'Save All Files',        icon: 'fa-solid fa-save',              action: () => saveAllFiles() },
+    { label: 'Upload Files',          icon: 'fa-solid fa-upload',            action: () => triggerUpload() },
+    { label: 'Download Workspace',    icon: 'fa-solid fa-download',          action: () => downloadWorkspace() },
+    { label: 'Undo',                  icon: 'fa-solid fa-rotate-left',       action: () => editorUndo() },
+    { label: 'Redo',                  icon: 'fa-solid fa-rotate-right',      action: () => editorRedo() },
+    { label: 'Find & Replace',        icon: 'fa-solid fa-magnifying-glass',  action: () => showFindReplace() },
+    { label: 'Global Search',         icon: 'fa-solid fa-search',            action: () => showGlobalSearch() },
+    { label: 'Format Document',       icon: 'fa-solid fa-align-left',        action: () => formatDocument() },
+    { label: 'Toggle Comment',        icon: 'fa-solid fa-code',              action: () => toggleComment() },
+    { label: 'Run Project',           icon: 'fa-solid fa-play',              action: () => runProject() },
+    { label: 'Run Current File',      icon: 'fa-solid fa-file-code',         action: () => runCurrentFile() },
+    { label: 'Open Terminal',         icon: 'fa-solid fa-terminal',          action: () => switchRightTab('terminal') },
+    { label: 'Git: Commit',           icon: 'fa-brands fa-git-alt',          action: () => { togglePanel('git'); gitRefresh(); } },
+    { label: 'Git: Push to GitHub',   icon: 'fa-brands fa-github',           action: () => showGitPanel() },
+    { label: 'Toggle Dark/Light',     icon: 'fa-solid fa-circle-half-stroke',action: () => toggleTheme() },
+    { label: 'Settings',              icon: 'fa-solid fa-gear',              action: () => showSettings() },
+    { label: 'Keyboard Shortcuts',    icon: 'fa-solid fa-keyboard',          action: () => showKeyboardShortcuts() },
+    { label: 'Environment Variables', icon: 'fa-solid fa-key',               action: () => showEnvManager() },
+    { label: 'About NEXUS IDE',       icon: 'fa-solid fa-circle-info',       action: () => showAbout() },
+    { label: 'Preview',               icon: 'fa-solid fa-eye',               action: () => switchRightTab('preview') },
+    { label: 'Diff Viewer',           icon: 'fa-solid fa-code-compare',      action: () => switchRightTab('diff') },
+    { label: 'Output Console',        icon: 'fa-solid fa-rectangle-list',    action: () => switchRightTab('output') },
+    { label: 'Split Editor',          icon: 'fa-solid fa-columns',           action: () => splitEditorHorizontal() },
+    { label: 'Close All Tabs',        icon: 'fa-solid fa-xmark',             action: () => closeAllTabs() },
+];
+let _cmdSelectedIdx = 0;
 
-function toggleActivity() {}
+function showCommandPalette() {
+    document.getElementById('cmdPaletteOverlay').style.display = 'flex';
+    const input = document.getElementById('cmdInput');
+    if (input) { input.value = ''; input.focus(); }
+    _cmdSelectedIdx = 0;
+    filterCommands('');
+}
+function hideCommandPalette() { document.getElementById('cmdPaletteOverlay').style.display = 'none'; }
+
+function filterCommands(val) {
+    const list = document.getElementById('cmdResults');
+    if (!list) return;
+    const q = (val || '').toLowerCase();
+    const filtered = q ? _CMD_REGISTRY.filter(c => c.label.toLowerCase().includes(q)) : _CMD_REGISTRY;
+    _cmdSelectedIdx = 0;
+    list.innerHTML = filtered.map((c, i) =>
+        `<div class="cmd-result-item${i === 0 ? ' selected' : ''}" data-idx="${i}" onclick="_cmdExec(${_CMD_REGISTRY.indexOf(c)})" onmouseenter="document.querySelectorAll('.cmd-result-item').forEach(el=>el.classList.remove('selected'));this.classList.add('selected');_cmdSelectedIdx=${i}">
+            <i class="${c.icon}"></i> <span class="cmd-label">${c.label}</span>
+        </div>`
+    ).join('') || '<div class="cmd-result-item disabled" style="opacity:0.5;pointer-events:none">No matching commands</div>';
+    list._filtered = filtered;
+}
+
+function _cmdExec(regIdx) {
+    hideCommandPalette();
+    _CMD_REGISTRY[regIdx]?.action();
+}
+
+function cmdKeyNav(e) {
+    const list = document.getElementById('cmdResults');
+    if (!list || !list._filtered) return;
+    const items = list.querySelectorAll('.cmd-result-item:not(.disabled)');
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        _cmdSelectedIdx = Math.min(_cmdSelectedIdx + 1, items.length - 1);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        _cmdSelectedIdx = Math.max(_cmdSelectedIdx - 1, 0);
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const f = list._filtered[_cmdSelectedIdx];
+        if (f) { hideCommandPalette(); f.action(); }
+        return;
+    } else { return; }
+    items.forEach(el => el.classList.remove('selected'));
+    if (items[_cmdSelectedIdx]) items[_cmdSelectedIdx].classList.add('selected');
+}
+
+function toggleActivity() { togglePanel('files'); }
 function showNewFileDialog() { document.getElementById('newFileModal').style.display = 'flex'; }
-function triggerUpload() {}
-function saveCurrentFile() { showToast('File saved!', 'success'); }
-function saveAllFiles() {}
-function downloadWorkspace() { showToast('Exporting workspace...', 'info'); }
-function triggerImport() {}
-function editorUndo() {}
-function editorRedo() {}
-function showFindReplace() {}
-function showGlobalSearch() {}
-function formatDocument() {}
-function toggleComment() {}
+function triggerUpload() {
+    const input = document.createElement('input');
+    input.type = 'file'; input.multiple = true;
+    input.onchange = async () => {
+        for (const file of input.files) {
+            const content = await file.text();
+            await fetch('/api/file/' + file.name, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
+        }
+        showToast(`Uploaded ${input.files.length} file(s)`, 'success');
+        loadFiles();
+    };
+    input.click();
+}
+function downloadWorkspace() {
+    showToast('Exporting workspace...', 'info');
+    window.location.href = '/api/workspace/download';
+}
+function triggerImport() { triggerUpload(); }
+
+function showGlobalSearch() {
+    const query = prompt('Search across all files:');
+    if (!query) return;
+    switchRightTab('terminal');
+    executeTerminalCommand(`grep -rn "${query.replace(/"/g, '\\"')}" . --include="*.py" --include="*.js" --include="*.html" --include="*.css" --include="*.ts" --include="*.json" --include="*.md" --include="*.txt" || echo "No matches found"`, output => {
+        if (_xterm) { output.split('\n').forEach(l => _xterm.writeln(l)); _xterm.write('\x1b[36m❯\x1b[0m '); }
+    });
+}
+
+function showAbout() {
+    let modal = document.getElementById('aboutModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'aboutModal';
+        modal.className = 'modal-overlay';
+        modal.onclick = () => modal.style.display = 'none';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `<div class="modal-box medium" onclick="event.stopPropagation()">
+        <div class="modal-head"><h3><i class="fa-solid fa-circle-info"></i> About NEXUS IDE</h3><button class="modal-close" onclick="hideModal('aboutModal')">&times;</button></div>
+        <div class="modal-body" style="padding:20px;text-align:center">
+            <div style="font-size:42px;margin-bottom:8px">⬡</div>
+            <h2 style="color:var(--cyan);margin:0">NEXUS <span style="color:var(--text-primary)">IDE</span></h2>
+            <p style="color:var(--text-dim);margin:4px 0 16px">Autonomous AI Development Environment</p>
+            <div style="text-align:left;background:var(--bg-inset);border-radius:8px;padding:16px;font-size:13px;line-height:1.8">
+                <div><strong>Version:</strong> 2.0</div>
+                <div><strong>Engine:</strong> NVIDIA NIM API</div>
+                <div style="margin-top:8px"><strong>Model Tiers:</strong></div>
+                <div style="padding-left:12px">
+                    🧠 Frontier — DeepSeek R1 70B<br>
+                    ⚡ Smart — Qwen 2.5 Coder 32B<br>
+                    🚀 Fast — Phi-4 Mini
+                </div>
+                <div style="margin-top:8px"><strong>Agent Modes:</strong></div>
+                <div style="padding-left:12px">
+                    Standard · Ultra · Swarm
+                </div>
+                <div style="margin-top:12px"><strong>Shortcuts:</strong></div>
+                <div style="padding-left:12px;font-family:var(--font-mono);font-size:12px">
+                    Ctrl+K — Command Palette<br>
+                    Ctrl+S — Save File<br>
+                    Ctrl+F — Find & Replace<br>
+                    Ctrl+/ — Toggle Comment<br>
+                    F5 — Run Project<br>
+                    Enter — Send Message
+                </div>
+            </div>
+        </div>
+    </div>`;
+    modal.style.display = 'flex';
+}
 
 function togglePanel(name) {
     document.querySelectorAll('.sp-section').forEach(el => el.classList.remove('active'));
@@ -415,23 +548,32 @@ function showAgentConfig() { showSettings(); }
 function showModelSelector() { document.getElementById('modelSelectorModal').style.display = 'flex'; }
 function toggleUltraMode() { showToast('Ultra Mode toggled'); }
 function showMemory() { document.getElementById('memoryModal').style.display = 'flex'; }
-function showToolLog() {}
+function showToolLog() { switchRightTab('toollog'); }
 function showTokenStats() { document.getElementById('tokenStatsModal').style.display = 'flex'; }
 
-function runProject() { showToast('Project Started'); }
-function runCurrentFile() {}
-function debugProject() {}
-function showRunConfig() {}
-function showEnvManager() {}
-function showDockerPanel() {}
-function showDeployPanel() {}
-function showGitPanel() {}
-function showNetlifyDeploy() {}
-function showVercelDeploy() {}
+function showDeployPanel() {
+    let modal = document.getElementById('deployModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'deployModal';
+        modal.className = 'modal-overlay';
+        modal.onclick = () => modal.style.display = 'none';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `<div class="modal-box medium" onclick="event.stopPropagation()">
+        <div class="modal-head"><h3><i class="fa-solid fa-rocket"></i> Deploy</h3><button class="modal-close" onclick="hideModal('deployModal')">&times;</button></div>
+        <div class="modal-body" style="padding:16px">
+            <div style="display:flex;flex-direction:column;gap:12px">
+                <button class="btn-primary" onclick="hideModal('deployModal');downloadWorkspace()" style="padding:12px;font-size:14px"><i class="fa-solid fa-download"></i> Download as ZIP</button>
+                <button class="btn-primary" onclick="hideModal('deployModal');showGitPanel()" style="padding:12px;font-size:14px;background:var(--bg-elevated);border:1px solid var(--border-dim)"><i class="fa-brands fa-github"></i> Push to GitHub</button>
+            </div>
+        </div>
+    </div>`;
+    modal.style.display = 'flex';
+}
 function showKeyboardShortcuts() { document.getElementById('shortcutsModal').style.display = 'flex'; }
 function showGuide() { if (typeof showGuideModal === 'function') showGuideModal(); }
 function showApiDocs() { if (typeof showGuideModal === 'function') showGuideModal(); }
-function showAbout() {}
 
 function toggleChatExpand() {}
 

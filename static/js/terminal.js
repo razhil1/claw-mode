@@ -256,6 +256,13 @@ async function runProject() {
     showToast('Running project...', 'info');
     switchRightTab('terminal');
 
+    const customCmd = localStorage.getItem('nexus_run_cmd');
+    if (customCmd) {
+        const result = await executeTerminalCommand(customCmd);
+        appendOutputLine(result, 'app');
+        return;
+    }
+
     let cmd = null;
     const files = NX.allFiles.map(f => typeof f === 'object' ? f.path : f);
 
@@ -422,9 +429,32 @@ function addWatch() {
     if (input) input.value = '';
 }
 
-function showRunConfig() { showToast('Run configurations: coming soon', 'info'); }
+function showRunConfig() {
+    let modal = document.getElementById('runConfigModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'runConfigModal';
+        modal.className = 'modal-overlay';
+        modal.onclick = () => modal.style.display = 'none';
+        document.body.appendChild(modal);
+    }
+    const saved = localStorage.getItem('nexus_run_cmd') || '';
+    modal.innerHTML = `<div class="modal-box medium" onclick="event.stopPropagation()">
+        <div class="modal-head"><h3><i class="fa-solid fa-gear"></i> Run Configuration</h3><button class="modal-close" onclick="hideModal('runConfigModal')">&times;</button></div>
+        <div class="modal-body" style="padding:16px">
+            <div style="margin-bottom:12px;color:var(--text-dim);font-size:13px">Set a custom run command for your project. Leave empty for auto-detection.</div>
+            <label style="font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block">Run Command</label>
+            <input type="text" id="runConfigCmd" placeholder="e.g. npm start, python main.py" value="${saved.replace(/"/g, '&quot;')}" style="width:100%;padding:10px;background:var(--bg-inset);border:1px solid var(--border-dim);border-radius:6px;color:var(--text);font-family:var(--font-mono);font-size:13px" />
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+                <button class="btn-ghost" onclick="hideModal('runConfigModal')">Cancel</button>
+                <button class="btn-primary" onclick="localStorage.setItem('nexus_run_cmd',document.getElementById('runConfigCmd').value);hideModal('runConfigModal');showToast('Run config saved','success')">Save</button>
+            </div>
+        </div>
+    </div>`;
+    modal.style.display = 'flex';
+}
 function showEnvManager() { showSettings(); switchSettingsPage('env'); }
-function showDockerPanel() { togglePanel('docker'); }
+function showDockerPanel() { showEnvManager(); }
 
 // ─── Environment Variables ───────────────────────────────────────────────────
 function addEnvVar() {

@@ -186,17 +186,16 @@
                             <kbd>F9</kbd></div>
                         <div class="tb-sep"></div>
                         <div onclick="showRunConfig()"><i class="fa-solid fa-gear"></i> Run Configurations</div>
-                        <div onclick="showEnvManager()"><i class="fa-solid fa-flask"></i> Environment Variables</div>
-                        <div onclick="showDockerPanel()"><i class="fa-brands fa-docker"></i> Docker / Container</div>
+                        <div onclick="showEnvManager()"><i class="fa-solid fa-key"></i> Environment Variables</div>
                     </div>
                 </div>
                 <div class="tb-menu-item" data-menu="deploy">
                     Deploy
                     <div class="tb-dropdown">
-                        <div onclick="showDeployPanel()"><i class="fa-solid fa-rocket"></i> Deploy to Cloud</div>
                         <div onclick="showGitPanel()"><i class="fa-brands fa-github"></i> Push to GitHub</div>
-                        <div onclick="showNetlifyDeploy()"><i class="fa-solid fa-globe"></i> Deploy to Netlify</div>
-                        <div onclick="showVercelDeploy()"><i class="fa-solid fa-triangle"></i> Deploy to Vercel</div>
+                        <div onclick="downloadWorkspace()"><i class="fa-solid fa-download"></i> Download as ZIP</div>
+                        <div class="tb-sep"></div>
+                        <div onclick="showDeployPanel()"><i class="fa-solid fa-rocket"></i> Deploy Options</div>
                     </div>
                 </div>
                 <div class="tb-menu-item" data-menu="help">
@@ -306,8 +305,8 @@
                 <button class="ab-btn" data-panel="api" onclick="togglePanel('api')" title="API Tester">
                     <i class="fa-solid fa-plug"></i>
                 </button>
-                <button class="ab-btn" data-panel="docker" onclick="togglePanel('docker')" title="Docker">
-                    <i class="fa-brands fa-docker"></i>
+                <button class="ab-btn" data-panel="env" onclick="showEnvManager()" title="Environment Variables">
+                    <i class="fa-solid fa-key"></i>
                 </button>
                 <button class="ab-btn" data-panel="system" onclick="togglePanel('system')" title="System Status">
                     <i class="fa-solid fa-gauge-high"></i>
@@ -2084,35 +2083,15 @@
                         <span>Git Push</span>
                         <small>Push to remote origin</small>
                     </div>
-                    <div class="deploy-card" onclick="deployTo('netlify')">
-                        <i class="fa-solid fa-globe"></i>
-                        <span>Netlify</span>
-                        <small>Static sites &amp; functions</small>
+                    <div class="deploy-card" onclick="downloadWorkspace()">
+                        <i class="fa-solid fa-download"></i>
+                        <span>Download ZIP</span>
+                        <small>Export workspace as archive</small>
                     </div>
-                    <div class="deploy-card" onclick="deployTo('vercel')">
-                        <i class="fa-solid fa-triangle"></i>
-                        <span>Vercel</span>
-                        <small>Next.js &amp; frontend apps</small>
-                    </div>
-                    <div class="deploy-card deploy-card--soon" title="Coming soon">
+                    <div class="deploy-card" onclick="deployTo('git')">
                         <i class="fa-brands fa-github"></i>
-                        <span>GitHub Pages</span>
-                        <small>Coming soon</small>
-                    </div>
-                    <div class="deploy-card deploy-card--soon" title="Coming soon">
-                        <i class="fa-solid fa-paper-plane"></i>
-                        <span>Fly.io</span>
-                        <small>Coming soon</small>
-                    </div>
-                    <div class="deploy-card deploy-card--soon" title="Coming soon">
-                        <i class="fa-solid fa-train-tram"></i>
-                        <span>Railway</span>
-                        <small>Coming soon</small>
-                    </div>
-                    <div class="deploy-card deploy-card--soon" title="Coming soon">
-                        <i class="fa-solid fa-server"></i>
-                        <span>Custom Server</span>
-                        <small>Coming soon</small>
+                        <span>Push to GitHub</span>
+                        <small>Commit &amp; push to remote</small>
                     </div>
                 </div>
                 <div class="deploy-log" id="deployLog"></div>
@@ -2146,10 +2125,15 @@
             <div class="modal-body about-body">
                 <div class="about-logo">⬡</div>
                 <h2>NEXUS<span>IDE</span></h2>
-                <p>Autonomous AI Agent Development Environment</p>
+                <p>Autonomous AI Development Environment</p>
                 <div class="about-version">v2.0.0 — Advanced Edition</div>
-                <div class="about-stack">
-                    Built with CodeMirror · xterm.js · marked.js · highlight.js
+                <div class="about-stack" style="text-align:left;margin-top:12px;font-size:12px;line-height:1.9">
+                    <div><strong>Model Tiers:</strong></div>
+                    <div style="padding-left:8px">🧠 Frontier — DeepSeek R1 70B</div>
+                    <div style="padding-left:8px">⚡ Smart — Qwen 2.5 Coder 32B</div>
+                    <div style="padding-left:8px">🚀 Fast — Phi-4 Mini</div>
+                    <div style="margin-top:6px"><strong>Agent Modes:</strong> Standard · Ultra · Swarm</div>
+                    <div style="margin-top:6px"><strong>Built with:</strong> CodeMirror · xterm.js · marked.js · highlight.js</div>
                 </div>
             </div>
             <div class="modal-foot">

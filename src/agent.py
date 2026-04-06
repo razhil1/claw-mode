@@ -144,7 +144,7 @@ _MODE_POLICIES: dict[str, dict] = {
         "turn_type":       "thinking",
         "preferred_model": "nvidia:deepseek-r1-distill-llama-70b",
         "tool_priority":   ["SearchTool", "FileReadTool", "ListDirTool",
-                            "ViewLinesTool"],
+                            "ViewFileLinesTool"],
         "read_only":       True,
     },
     "reviewer": {
@@ -152,7 +152,7 @@ _MODE_POLICIES: dict[str, dict] = {
         "turn_type":       "thinking",
         "preferred_model": "nvidia:deepseek-r1-distill-llama-70b",
         "tool_priority":   ["FileReadTool", "SearchTool", "ListDirTool",
-                            "ViewLinesTool"],
+                            "ViewFileLinesTool"],
         "read_only":       True,
     },
 }
@@ -247,6 +247,12 @@ TOOL: FileCopyTool      | <src> ::: <dst>
 ── Execution ──
 TOOL: BashTool          | <shell command>
 TOOL: ThinkTool         | <reasoning>
+── Quality ──
+TOOL: LintTool          | <path>
+TOOL: FormatTool        | <path>
+TOOL: TestRunTool       | <test command>
+TOOL: DepsInstall       | <install command>
+TOOL: GitTool           | <git subcommand + args>
 ── Backup ──
 TOOL: WorkspaceZipTool  | <name.zip>
 TOOL: WorkspaceUnzipTool| <name.zip>
@@ -699,7 +705,30 @@ _KNOWN_TOOLS = {
     "FileEditTool", "FilePatchTool", "FileDeleteTool",
     "FileMoveTool", "FileCopyTool", "FileInfoTool",
     "BashTool", "ThinkTool",
+    "LintTool", "FormatTool", "TestRunTool", "DepsInstall", "GitTool",
     "WorkspaceZipTool", "WorkspaceUnzipTool",
+}
+
+_LANG_LINTERS: dict[str, str] = {
+    ".py":   "python -m ruff check --fix {f} 2>&1 || python -m flake8 {f}",
+    ".js":   "npx eslint --fix {f}",
+    ".ts":   "npx eslint --fix {f}",
+    ".tsx":  "npx eslint --fix {f}",
+    ".rs":   "cargo clippy -- -W clippy::all 2>&1",
+    ".go":   "golangci-lint run {f} 2>&1",
+    ".rb":   "rubocop -a {f}",
+    ".php":  "phpcs {f}",
+}
+
+_LANG_FORMATTERS: dict[str, str] = {
+    ".py":   "python -m black {f} && python -m isort {f}",
+    ".js":   "npx prettier --write {f}",
+    ".ts":   "npx prettier --write {f}",
+    ".tsx":  "npx prettier --write {f}",
+    ".rs":   "rustfmt {f}",
+    ".go":   "gofmt -w {f}",
+    ".java": "google-java-format -i {f}",
+    ".rb":   "rubocop -a {f}",
 }
 
 
@@ -802,6 +831,29 @@ def _execute_tool(tool_name: str, payload: str) -> str:
 
         if tool_name == "BashTool":
             return tool_bash_run(payload)
+
+        if tool_name == "LintTool":
+            ext = Path(payload).suffix.lower()
+            tmpl = _LANG_LINTERS.get(ext)
+            if tmpl:
+                return tool_bash_run(tmpl.format(f=payload))
+            return f"No linter configured for *{ext} files."
+
+        if tool_name == "FormatTool":
+            ext = Path(payload).suffix.lower()
+            tmpl = _LANG_FORMATTERS.get(ext)
+            if tmpl:
+                return tool_bash_run(tmpl.format(f=payload))
+            return f"No formatter configured for *{ext} files."
+
+        if tool_name == "TestRunTool":
+            return tool_bash_run(payload)
+
+        if tool_name == "DepsInstall":
+            return tool_bash_run(payload)
+
+        if tool_name == "GitTool":
+            return tool_bash_run(f"git {payload}")
 
         if tool_name == "WorkspaceZipTool":
             # tool_workspace_zip() now returns bytes; we save to a file and return a message
