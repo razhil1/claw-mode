@@ -1,4 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  NEXUS IDE — Python Dependencies
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Web framework
 flask>=3.1.0
+
+# AI provider client (used by ALL providers — NVIDIA, OpenAI, OpenRouter, Groq,
+# Ollama, and any custom OpenAI-compatible endpoint)
 openai>=1.50.0
+
+# Token counting (used for context window management)
 tiktoken>=0.7.0
+
+# HTTP requests (used for Ollama discovery, provider health checks, etc.)
 requests>=2.31.0
+
+# PostgreSQL driver (used by the optional DB panel in Settings → Database)
+# Install psycopg2-binary (not psycopg2) — it ships pre-compiled, no pg_config needed
+psycopg2-binary>=2.9.0
+
+# ── Optional / local providers ───────────────────────────────────────────────
+# Ollama:     No extra package needed — uses openai client + requests
+# LM Studio:  No extra package needed — uses openai client
+# vLLM:       No extra package needed — uses openai client
