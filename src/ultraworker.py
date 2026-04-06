@@ -358,6 +358,16 @@ TOOL: GitTool           | <git_subcommand_and_args>
 TOOL: WorkspaceZipTool  | <backup_name.zip>
 TOOL: WorkspaceUnzipTool| <backup_name.zip>
 
+━━━ TOOL CALL FORMAT (CRITICAL) ━━━
+Each tool call must be on its OWN line. The pipe (|) separates tool name from argument.
+The argument is ONLY the input — never include expected output, plans, or commentary.
+
+CORRECT:   TOOL: ListDirTool | .
+WRONG:     TOOL: ListDirTool | . → expected output here
+WRONG:     TOOL: ListDirTool | . ### Step 2: ...
+
+After a TOOL line, STOP. Wait for the result before continuing.
+
 ━━━ EDITING DISCIPLINE ━━━
 • READ before WRITE. Always. No exceptions.
 • FilePatchTool for surgical edits. FileEditTool only for new files or full rewrites.
@@ -682,6 +692,23 @@ _KNOWN_TOOLS = {
     "WorkspaceZipTool", "WorkspaceUnzipTool",
 }
 
+_SINGLE_ARG_TOOLS_UW = {
+    "ListDirTool", "FileReadTool", "FileDeleteTool",
+    "LintTool", "FormatTool",
+    "WorkspaceZipTool", "WorkspaceUnzipTool",
+}
+
+
+def _sanitize_simple_payload(payload: str) -> str:
+    """For single-argument tools, strip trailing junk the LLM may have appended."""
+    s = payload.strip().split("\n")[0].strip()
+    s = re.split(r'\s*[→►▶]\s*', s)[0].strip()
+    s = re.split(r'\s*```', s)[0].strip()
+    s = re.split(r'\s*###?\s', s)[0].strip()
+    s = re.split(r'\s*\(this ', s, flags=re.IGNORECASE)[0].strip()
+    s = s.strip("`'\"")
+    return s
+
 
 def _clean(raw: str) -> str:
     s = raw.strip()
@@ -719,6 +746,8 @@ def _clean(raw: str) -> str:
 def execute_tool(tool: str, raw: str, root: Path) -> ToolResult:
     """Dispatch a single tool call and return a structured result."""
     payload = _clean(raw)
+    if tool in _SINGLE_ARG_TOOLS_UW:
+        payload = _sanitize_simple_payload(payload)
     t0      = time.perf_counter()
     out     = ""
     ok      = True

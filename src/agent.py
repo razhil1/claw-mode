@@ -250,6 +250,23 @@ TOOL: ThinkTool         | <reasoning>
 TOOL: WorkspaceZipTool  | <name.zip>
 TOOL: WorkspaceUnzipTool| <name.zip>
 
+━━━ TOOL CALL FORMAT (CRITICAL) ━━━
+Each tool call must be on its OWN line. The pipe (|) separates tool name from argument.
+The argument is ONLY the input — never include expected output, plans, or commentary.
+
+CORRECT:
+TOOL: ListDirTool | .
+TOOL: FileReadTool | src/app.py
+TOOL: BashTool | npm install express
+
+WRONG (do NOT do this):
+TOOL: ListDirTool | . → expected output here
+TOOL: FileReadTool | src/app.py (this will show the config)
+TOOL: BashTool | npm install express ### Step 2: Create server
+
+After a TOOL line, STOP. Do not write anything else on that line or after it.
+Wait for the tool result before continuing.
+
 ━━━ EDITING DISCIPLINE ━━━
 • READ before WRITE. Always. No exceptions.
 • FilePatchTool for surgical edits. FileEditTool for new files or full rewrites.
@@ -598,10 +615,17 @@ _PARAM_PREFIX_RE = re.compile(
 )
 
 
+_SINGLE_ARG_TOOLS = {
+    "ListDirTool", "TreeTool", "GlobTool", "FileInfoTool",
+    "FileReadTool", "FileDeleteTool",
+    "WorkspaceZipTool", "WorkspaceUnzipTool",
+}
+
+
 def _clean_payload(payload: str) -> str:
     """Strip LLM-generated parameter prefixes and wrapping from tool payloads."""
     cleaned = payload.strip()
-    
+
     # Strip hallucinated tags like [TOOL_CALL], [/TOOL_CALL], or any <tag>
     cleaned = re.sub(r'\[/?\w+\]', '', cleaned).strip()
     cleaned = re.sub(r'</?\w+>', '', cleaned).strip()
@@ -654,9 +678,22 @@ _KNOWN_TOOLS = {
 }
 
 
+def _sanitize_simple_payload(payload: str) -> str:
+    """For single-argument tools, strip trailing junk the LLM may have appended."""
+    s = payload.strip().split("\n")[0].strip()
+    s = re.split(r'\s*[→►▶]\s*', s)[0].strip()
+    s = re.split(r'\s*```', s)[0].strip()
+    s = re.split(r'\s*###?\s', s)[0].strip()
+    s = re.split(r'\s*\(this ', s, flags=re.IGNORECASE)[0].strip()
+    s = s.strip("`'\"")
+    return s
+
+
 def _execute_tool(tool_name: str, payload: str) -> str:
     """Dispatch a single tool call and return its output string."""
     payload = _clean_payload(payload)
+    if tool_name in _SINGLE_ARG_TOOLS:
+        payload = _sanitize_simple_payload(payload)
     try:
         if tool_name == "ThinkTool":
             return f"[Internal Reasoning]: {payload}"
@@ -762,7 +799,11 @@ def _execute_tool(tool_name: str, payload: str) -> str:
         return f"Unknown tool '{tool_name}'. Known: {', '.join(sorted(_KNOWN_TOOLS))}"
 
     except Exception as exc:
-        return f"Tool error ({tool_name}): {exc}"
+        return (
+            f"Tool error ({tool_name}): {exc}\n"
+            f"HINT: Check your tool call format. Correct format is: TOOL: {tool_name} | <argument>\n"
+            "The argument should contain ONLY the input (path, command, etc.), nothing else."
+        )
 
 
 def _is_error(output: str) -> bool:
