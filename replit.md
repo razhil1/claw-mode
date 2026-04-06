@@ -1,39 +1,56 @@
-# Claw IDE — AI Coding Agent IDE
+# NEXUS IDE — AI Coding Agent IDE
 
-A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses NVIDIA's API (OpenAI-compatible) to call LLMs and can run bash commands, read/write files, and perform multi-turn reasoning loops.
+A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses multiple AI providers (NVIDIA, OpenAI, OpenRouter, Groq, Ollama, Custom) to call LLMs and can run bash commands, read/write files, and perform multi-turn reasoning loops.
 
 ## Architecture
 
 - **app.py** — Flask web server; REST + SSE API endpoints
 - **src/** — Python agent runtime
   - `agent.py` — `ClawAgent` class: multi-turn agentic loop with stop signal support
-  - `llm.py` — LLM client using NVIDIA's API (via openai package) with 7 free models
+  - `ultraworker.py` — Ultra mode worker with enhanced capabilities
+  - `llm.py` — LLM client supporting multiple providers (NVIDIA, OpenAI, OpenRouter, Groq, Ollama, Custom)
   - `toolbox.py` — Tool implementations (bash, file read/write/search/list)
   - `tools.py` — Tool metadata/definitions
   - `commands.py` — Agent slash-commands
+  - `plans.py` — Plans & licensing system (Community/Pro/Enterprise tiers)
+  - `telegram_bot.py` — Telegram bot for purchase processing & license activation
+  - `security.py` — CSRF protection, security headers, rate limiting, input sanitization
 - **templates/index.html** — Frontend SPA (chat UI + code editor + terminal + preview)
-- **static/css/style.css** — Full dark/light theme with CSS variables
-- **static/js/main.js** — Complete frontend logic
+- **static/css/nexus.css** — Full dark/light theme with CSS variables
+- **static/js/** — Frontend JavaScript modules:
+  - `nexus.js` — Core UI functions, settings, modal management
+  - `editor.js` — CodeMirror editor, language picker, indent settings
+  - `agent.js` — Agent chat, streaming, mode switching
+  - `terminal.js` — Terminal emulation, split terminals, run/debug
+  - `files.js` — File tree, drag & drop, upload
+  - `git.js` — Git operations, branch management, git config
+  - `models.js` — Model selector, provider management
+  - `tools.js` — Search, diff viewer, replace all
+  - `keybindings.js` — Keyboard shortcuts
+  - `ui.js` — UI utilities
+  - `plans.js` — Plans/pricing modal, license activation, profile, guide, community
+  - `main.js` — Fallback stubs for functions
 - **agent_workspace/** — Runtime workspace where the agent creates/edits files
+- **agent_workspace/.knowledge.md** — Built-in knowledge base (30 specialist agents, 135 skills)
 
 ## Key Configuration
 
-- **Port:** 5000 (gunicorn gthread, 4 threads, 300s timeout)
-- **LLM Provider:** NVIDIA (https://integrate.api.nvidia.com/v1) — OpenAI-compatible
-- **API Key env var:** `NVIDIA_API_KEY`
-- **Default Model:** `nvidia:phi-4-mini-instruct` → `microsoft/phi-4-mini-instruct`
+- **Port:** 5000 (Flask dev server or gunicorn)
+- **LLM Providers:** NVIDIA, OpenAI, OpenRouter, Groq, Ollama, Custom
+- **Provider prefix format:** `provider:model_name` (e.g., `nvidia:phi-4-mini-instruct`)
+- **Provider config:** `~/.config/nexus/providers.json`
+- **Default Model:** `nvidia:phi-4-mini-instruct`
 - **Agent workspace:** `./agent_workspace/`
 - **Max agent turns:** 16 per message
 
-## Available Models (all free via NVIDIA)
+## Plans & Licensing
 
-- `nvidia:phi-4-mini-instruct` — Phi-4 Mini (default, fast, 16K ctx)
-- `nvidia:llama-3.3-70b-instruct` — Llama 3.3 70B (best all-rounder, 128K ctx)
-- `nvidia:llama-3.1-8b-instruct` — Llama 3.1 8B (ultra-fast, 128K ctx)
-- `nvidia:deepseek-r1-distill-llama-70b` — DeepSeek R1 Distill (thinking/reasoning, 128K ctx)
-- `nvidia:qwen2.5-coder-32b` — Qwen2.5 Coder 32B (code specialist, 32K ctx)
-- `nvidia:nemotron-super-49b` — Nemotron Super 49B (powerful, 32K ctx)
-- `nvidia:gemma-3-12b` — Gemma 3 12B (balanced, 131K ctx)
+- **Community** — Free, 50 messages/day, 3 agent modes
+- **Pro** — $19/mo, unlimited messages, all 6 modes, priority support
+- **Enterprise** — $49/mo, unlimited, multi-agent, team features, custom models
+- **License keys:** `NX-PRO-XXXXXXXX` or `NX-ENT-XXXXXXXX`
+- **License storage:** `~/.config/nexus/plan.json`
+- **Purchase flow:** IDE → purchase code → Telegram bot `/activate CODE` → license key → activate in IDE
 
 ## API Endpoints
 
@@ -53,9 +70,21 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 - `POST /api/session/<id>/clear` — Clear session history
 - `POST /api/chat/stream` — Stream agent SSE events
 - `POST /api/chat/stop` — Send stop signal to running agent
-- `GET /api/settings/key-status` — Check NVIDIA API key status
-- `POST /api/settings/validate-key` — Validate NVIDIA API key
-- `POST /api/settings/set-key` — Set NVIDIA API key for current session
+- `GET /api/settings/key-status` — Check API key status
+- `POST /api/settings/validate-key` — Validate API key
+- `POST /api/settings/set-key` — Set API key for current session
+- `GET /api/plans` — Get all plans and current plan info
+- `GET /api/plans/current` — Current plan details
+- `POST /api/plans/check-limit` — Check message limit
+- `POST /api/plans/purchase-code` — Generate purchase code
+- `POST /api/license/activate` — Activate license key
+- `POST /api/license/deactivate` — Deactivate license
+- `GET /api/profile` — User profile with plan info
+- `POST /api/telegram/webhook` — Telegram bot webhook
+- `POST /api/telegram/setup` — Configure Telegram bot
+- `GET /api/telegram/status` — Telegram bot status
+- `GET /api/guide` — Getting started guide
+- `GET /api/community` — Community links
 
 ## SSE Event Types
 
@@ -65,32 +94,33 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 - `token` — Text output chunk
 - `done` — Final stats `{turns, files_changed, history_len}`
 - `error` — Error message
-- `key_error` — API key issue `{error_type, message}` (auto-opens settings)
+- `key_error` — API key issue `{error_type, message}`
 - `stopped` — Agent stopped by user signal
 
-## Features
+## Security
 
-- **7 free NVIDIA models** — Switch between them in the sidebar
-- **Stop agent** — Abort ongoing agent runs mid-stream
-- **Dark/light theme** — Toggle with ☾ button, persisted in localStorage
-- **Session persistence** — Session ID saved in localStorage across reloads
-- **File drag & drop upload** — Drop files onto the file explorer
-- **File search** — Filter workspace files by name
-- **File rename** — Right-click → Rename in context menu
-- **Live preview** — Iframe preview of HTML files with auto-refresh
-- **Built-in terminal** — Run commands in agent_workspace with history
-- **Code editor** — Textarea editor with line numbers and syntax highlighting
-- **Settings modal** — Configure NVIDIA API key with live validation
-- **Export chat** — Download chat as Markdown
-- **Keyboard shortcuts** — Ctrl+/ focus prompt, Ctrl+Shift+N new session, Ctrl+S save file, Esc close modals
+- Security headers (CSP, XSS protection, etc.) via `src/security.py`
+- CSRF token support for state-changing endpoints
+- Rate limiting: 120 requests per minute
+- Input sanitization and path traversal protection
+- Agent workspace isolation
+
+## EXE Packaging
+
+- `build_exe.bat` (Windows) or `build_exe.sh` (Mac/Linux)
+- Output: `dist/NEXUS_IDE.exe`
+- Uses PyInstaller; requires Python 3.11 or 3.12
 
 ## Dependencies
 
 - Python 3.11+
-- Flask 3.x
-- Gunicorn with gthread workers (4 threads, 300s timeout)
-- openai (Python package, used with NVIDIA's OpenAI-compatible endpoint)
+- Flask 3.x, Flask-SQLAlchemy, Flask-Login
+- openai (Python package, multi-provider)
+- psycopg2-binary (PostgreSQL)
+- PyInstaller (for EXE builds)
 
 ## Running
 
+- **Dev:** `python app.py`
 - **Production:** `gunicorn --bind 0.0.0.0:5000 --reuse-port --reload --worker-class gthread --threads 4 --timeout 300 app:app`
+- **Local:** `./start.sh` (Mac/Linux) or `start.bat` (Windows)

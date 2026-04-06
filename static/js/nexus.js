@@ -284,9 +284,9 @@ function showModelSelector() { showModal('modelSelectorModal'); renderModelCards
 function showKeyboardShortcuts() { showModal('shortcutsModal'); }
 function showAbout() { showModal('aboutModal'); }
 function showDeployPanel() { showModal('deployModal'); }
-function showGuide() { showToast('Getting Started guide coming soon', 'info'); }
-function showApiDocs() { showToast('API Reference coming soon', 'info'); }
-function showProfileMenu() { showToast('Profile menu coming soon', 'info'); }
+function showGuide() { if (typeof showGuideModal === 'function') showGuideModal(); else showToast('Guide loading...', 'info'); }
+function showApiDocs() { if (typeof showGuideModal === 'function') showGuideModal(); else showToast('API docs loading...', 'info'); }
+function showProfileMenu() { if (typeof showProfileModal === 'function') showProfileModal(); else showToast('Profile loading...', 'info'); }
 
 function switchSettingsPage(pg) {
     document.querySelectorAll('.settings-page').forEach(e => e.classList.remove('active'));

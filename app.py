@@ -1730,6 +1730,129 @@ def _shutdown() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# PLANS, LICENSING & PROFILE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/plans")
+def api_plans() -> Response:
+    from src.plans import get_all_plans, get_current_plan
+    return jsonify({"plans": get_all_plans(), "current": get_current_plan()})
+
+@app.route("/api/plans/current")
+def api_current_plan() -> Response:
+    from src.plans import get_current_plan
+    return jsonify(get_current_plan())
+
+@app.route("/api/plans/check-limit")
+def api_check_limit() -> Response:
+    from src.plans import check_message_limit
+    allowed, info = check_message_limit()
+    return jsonify({"allowed": allowed, "info": info})
+
+@app.route("/api/plans/purchase-code", methods=["POST"])
+def api_purchase_code() -> Response:
+    data = request.json or {}
+    tier = data.get("tier", "pro")
+    from src.plans import generate_purchase_code
+    code = generate_purchase_code(tier)
+    if code:
+        return jsonify({"code": code, "tier": tier,
+                        "instructions": "Send this code to our Telegram bot @NexusIDEBot with: /activate " + code})
+    return jsonify({"error": "Invalid tier"}), 400
+
+@app.route("/api/license/activate", methods=["POST"])
+def api_activate_license() -> Response:
+    data = request.json or {}
+    key = data.get("license_key", "")
+    from src.plans import activate_license
+    ok, msg = activate_license(key)
+    return jsonify({"success": ok, "message": msg}), (200 if ok else 400)
+
+@app.route("/api/license/deactivate", methods=["POST"])
+def api_deactivate_license() -> Response:
+    from src.plans import deactivate_license
+    ok, msg = deactivate_license()
+    return jsonify({"success": ok, "message": msg})
+
+@app.route("/api/profile")
+def api_profile() -> Response:
+    from src.plans import get_current_plan
+    plan = get_current_plan()
+    return jsonify({
+        "plan": plan["current_tier"],
+        "plan_name": plan["name"],
+        "badge_color": plan["badge_color"],
+        "messages_today": plan.get("messages_today", 0),
+        "features": plan.get("features", {}),
+        "license_key": plan.get("license_key"),
+        "activated_at": plan.get("activated_at"),
+        "expires_at": plan.get("expires_at"),
+    })
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TELEGRAM BOT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/telegram/webhook", methods=["POST"])
+def telegram_webhook() -> Response:
+    from src.telegram_bot import handle_webhook
+    payload = request.json or {}
+    result = handle_webhook(payload)
+    return jsonify(result)
+
+@app.route("/api/telegram/setup", methods=["POST"])
+def telegram_setup() -> Response:
+    data = request.json or {}
+    token = data.get("token", "")
+    from src.telegram_bot import set_bot_token
+    ok, msg = set_bot_token(token)
+    return jsonify({"success": ok, "message": msg}), (200 if ok else 400)
+
+@app.route("/api/telegram/status")
+def telegram_status() -> Response:
+    from src.telegram_bot import get_bot_token
+    token = get_bot_token()
+    return jsonify({"configured": bool(token), "masked_token": token[:8] + "..." if token else ""})
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMMUNITY & GUIDE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/guide")
+def api_guide() -> Response:
+    return jsonify({"sections": [
+        {"title": "Getting Started", "content": "Welcome to NEXUS IDE! Start by configuring your AI provider in Settings. Then type a task in the chat box and press Enter."},
+        {"title": "Agent Modes", "content": "Choose a mode above the chat box:\n• Auto — Let NEXUS pick the best approach\n• Builder — Build new features or projects\n• Debugger — Fix errors and bugs\n• Refactorer — Clean up and improve code\n• Researcher — Answer questions and explain concepts\n• Reviewer — Review code quality and security"},
+        {"title": "File Management", "content": "Use the File Explorer panel to browse, create, rename, and delete files. Drag and drop files to upload. The agent saves all files in agent_workspace/."},
+        {"title": "Terminal", "content": "Open the terminal panel to run commands directly. The agent can also run commands during task execution."},
+        {"title": "Git Integration", "content": "Click the Git icon in the activity bar to view file status, commit changes, and switch branches."},
+        {"title": "AI Providers", "content": "NEXUS supports multiple AI providers:\n• NVIDIA (free) — build.nvidia.com\n• Ollama (free, local) — ollama.com\n• Groq (free) — console.groq.com\n• OpenRouter — openrouter.ai\n• OpenAI — platform.openai.com\nConfigure any provider in Settings."},
+        {"title": "Keyboard Shortcuts", "content": "Ctrl+Enter — Send message\nCtrl+S — Save file\nCtrl+K — Command palette\nCtrl+Shift+F — Global search\nCtrl+B — Toggle sidebar\nCtrl+` — Toggle terminal"},
+        {"title": "Plans & Upgrade", "content": "Community (free) includes 50 messages/day and 3 agent modes. Upgrade to Pro for unlimited messages, all modes, and multi-agent swarm. Enterprise adds team features and API access."},
+    ]})
+
+@app.route("/api/community")
+def api_community() -> Response:
+    return jsonify({"links": [
+        {"name": "Discord", "url": "https://discord.gg/nexus-ide", "icon": "message-circle", "description": "Chat with other NEXUS users, share projects, get help"},
+        {"name": "GitHub", "url": "https://github.com/nexus-ide", "icon": "github", "description": "Source code, issues, feature requests"},
+        {"name": "Documentation", "url": "https://docs.nexus-ide.dev", "icon": "book-open", "description": "Full documentation and API reference"},
+        {"name": "Telegram", "url": "https://t.me/NexusIDEBot", "icon": "send", "description": "Purchase plans, get support, stay updated"},
+        {"name": "Roadmap", "url": "https://roadmap.nexus-ide.dev", "icon": "map", "description": "Upcoming features and release schedule"},
+        {"name": "Blog", "url": "https://blog.nexus-ide.dev", "icon": "file-text", "description": "Tutorials, tips, and project showcases"},
+    ]})
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECURITY INITIALIZATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+try:
+    from src.security import init_security
+    init_security(app)
+except Exception as e:
+    log.warning("Security middleware init failed: %s", e)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ENTRY POINT
 # ═══════════════════════════════════════════════════════════════════════════════
 

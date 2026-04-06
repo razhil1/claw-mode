@@ -204,8 +204,11 @@
                     <div class="tb-dropdown">
                         <div onclick="showKeyboardShortcuts()"><i class="fa-solid fa-keyboard"></i> Keyboard Shortcuts
                             <kbd>⌘K ⌘S</kbd></div>
-                        <div onclick="showGuide()"><i class="fa-solid fa-book-open"></i> Getting Started</div>
-                        <div onclick="showApiDocs()"><i class="fa-solid fa-code"></i> API Reference</div>
+                        <div onclick="showGuideModal()"><i class="fa-solid fa-book-open"></i> Getting Started</div>
+                        <div onclick="showGuideModal()"><i class="fa-solid fa-code"></i> API Reference</div>
+                        <div class="tb-sep"></div>
+                        <div onclick="showCommunityModal()"><i class="fa-solid fa-users"></i> Community</div>
+                        <div onclick="showPlansModal()"><i class="fa-solid fa-crown"></i> Plans & Pricing</div>
                         <div class="tb-sep"></div>
                         <div onclick="showAbout()"><i class="fa-solid fa-circle-info"></i> About NEXUS IDE</div>
                     </div>
@@ -254,13 +257,16 @@
                 <i class="fa-solid fa-layout"></i>
             </button>
 
+            <!-- Plan Badge -->
+            <button class="tb-plan-badge" id="planBadge" onclick="showPlansModal()" title="Current Plan" style="display:none">Community</button>
+
             <!-- Settings -->
             <button class="tb-icon-btn" onclick="showSettings()" title="Settings">
                 <i class="fa-solid fa-gear"></i>
             </button>
 
             <!-- Profile -->
-            <button class="tb-avatar" onclick="showProfileMenu()" title="Account">
+            <button class="tb-avatar" onclick="showProfileModal()" title="Account">
                 <span id="avatarInitial">N</span>
             </button>
         </div>
@@ -1369,6 +1375,13 @@
                             class="fa-solid fa-flask"></i> Env Variables</button>
                     <button class="sn-item" onclick="switchSettingsPage('advanced')" data-page="advanced"><i
                             class="fa-solid fa-sliders"></i> Advanced</button>
+                    <div style="border-top:1px solid var(--border-dim);margin:8px 0"></div>
+                    <button class="sn-item" onclick="switchSettingsPage('plans')" data-page="plans"><i
+                            class="fa-solid fa-crown"></i> Plans</button>
+                    <button class="sn-item" onclick="switchSettingsPage('telegram')" data-page="telegram"><i
+                            class="fa-brands fa-telegram"></i> Telegram</button>
+                    <button class="sn-item" onclick="switchSettingsPage('security')" data-page="security"><i
+                            class="fa-solid fa-shield-halved"></i> Security</button>
                 </div>
                 <!-- Settings Pages -->
                 <div class="settings-content">
@@ -1669,6 +1682,85 @@
                             <label>Clear all data</label>
                             <button class="danger-btn" onclick="clearAllData()"><i class="fa-solid fa-trash"></i> Reset
                                 NEXUS</button>
+                        </div>
+                    </div>
+
+                    <!-- Plans Page -->
+                    <div class="settings-page" id="spage-plans">
+                        <h3><i class="fa-solid fa-crown"></i> Plans & Licensing</h3>
+                        <div class="sp-section">
+                            <div id="settingsPlansInfo" style="margin-bottom:12px">
+                                <p style="color:var(--fg-dim)">Manage your subscription and license key.</p>
+                            </div>
+                            <div class="sp-row">
+                                <label>License Key</label>
+                                <div style="display:flex;gap:8px;flex:1">
+                                    <input type="text" id="settingsLicenseKey" placeholder="NX-PRO-XXXXXXXX" class="sp-input" style="flex:1" />
+                                    <button class="btn-primary btn-sm" onclick="activateLicense()">Activate</button>
+                                </div>
+                            </div>
+                            <div class="sp-row">
+                                <label>View Plans</label>
+                                <button class="btn-ghost btn-sm" onclick="hideModal('settingsModal');showPlansModal()"><i class="fa-solid fa-crown"></i> Compare Plans</button>
+                            </div>
+                            <div class="sp-row">
+                                <label>Purchase via Telegram</label>
+                                <span style="color:var(--fg-dim)">Send /plans to <strong>@NexusIDEBot</strong></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Telegram Page -->
+                    <div class="settings-page" id="spage-telegram">
+                        <h3><i class="fa-brands fa-telegram"></i> Telegram Bot</h3>
+                        <div class="sp-section">
+                            <p style="color:var(--fg-dim);margin-bottom:12px">Connect a Telegram bot for purchase processing, support, and notifications.</p>
+                            <div class="sp-row">
+                                <label>Bot Token</label>
+                                <div style="display:flex;gap:8px;flex:1">
+                                    <input type="password" id="telegramTokenInput" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" class="sp-input" style="flex:1" />
+                                    <button class="btn-primary btn-sm" onclick="setupTelegramBot()"><i class="fa-solid fa-plug"></i> Connect</button>
+                                </div>
+                            </div>
+                            <div class="sp-row">
+                                <label>Status</label>
+                                <span id="telegramStatus" class="provider-dot"></span>
+                            </div>
+                            <div class="sp-row">
+                                <label>Setup Guide</label>
+                                <span style="color:var(--fg-dim);font-size:12px">1. Message @BotFather on Telegram → /newbot<br>2. Copy the token → paste above → Connect</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Security Page -->
+                    <div class="settings-page" id="spage-security">
+                        <h3><i class="fa-solid fa-shield-halved"></i> Security</h3>
+                        <div class="sp-section">
+                            <div class="sp-row">
+                                <label>Security Headers</label>
+                                <span style="color:var(--green)"><i class="fa-solid fa-circle-check"></i> Active</span>
+                            </div>
+                            <div class="sp-row">
+                                <label>CSRF Protection</label>
+                                <span style="color:var(--green)"><i class="fa-solid fa-circle-check"></i> Enabled</span>
+                            </div>
+                            <div class="sp-row">
+                                <label>Rate Limiting</label>
+                                <span style="color:var(--green)"><i class="fa-solid fa-circle-check"></i> Active (120 req/min)</span>
+                            </div>
+                            <div class="sp-row">
+                                <label>Input Sanitization</label>
+                                <span style="color:var(--green)"><i class="fa-solid fa-circle-check"></i> All inputs validated</span>
+                            </div>
+                            <div class="sp-row">
+                                <label>Path Traversal Guard</label>
+                                <span style="color:var(--green)"><i class="fa-solid fa-circle-check"></i> Blocked</span>
+                            </div>
+                            <div class="sp-row">
+                                <label>Workspace Isolation</label>
+                                <span style="color:var(--green)"><i class="fa-solid fa-circle-check"></i> Agent confined to workspace</span>
+                            </div>
                         </div>
                     </div>
 
@@ -2058,6 +2150,58 @@
         </div>
     </div>
 
+    <!-- ── Plans Modal ── -->
+    <div class="modal-overlay" id="plansModal" onclick="hideModal('plansModal')">
+        <div class="modal-box xlarge" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-crown" style="color:#f59e0b"></i> Plans & Pricing</h3>
+                <button class="modal-close" onclick="hideModal('plansModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="plansContent" style="padding:20px">
+                <p style="color:var(--fg-dim)">Loading plans...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Profile Modal ── -->
+    <div class="modal-overlay" id="profileModal" onclick="hideModal('profileModal')">
+        <div class="modal-box medium" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-user-astronaut"></i> Profile</h3>
+                <button class="modal-close" onclick="hideModal('profileModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="profileContent" style="padding:20px">
+                <p style="color:var(--fg-dim)">Loading profile...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Guide Modal ── -->
+    <div class="modal-overlay" id="guideModal" onclick="hideModal('guideModal')">
+        <div class="modal-box large" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-book-open" style="color:#60a5fa"></i> Getting Started</h3>
+                <button class="modal-close" onclick="hideModal('guideModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="guideContent" style="padding:20px;max-height:70vh;overflow-y:auto">
+                <p style="color:var(--fg-dim)">Loading guide...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Community Modal ── -->
+    <div class="modal-overlay" id="communityModal" onclick="hideModal('communityModal')">
+        <div class="modal-box large" onclick="event.stopPropagation()">
+            <div class="modal-head">
+                <h3><i class="fa-solid fa-users" style="color:#a78bfa"></i> Community</h3>
+                <button class="modal-close" onclick="hideModal('communityModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="communityContent" style="padding:20px">
+                <p style="color:var(--fg-dim)">Loading community info...</p>
+            </div>
+        </div>
+    </div>
+
     <!-- ════════════════════════════════════════════════════
      CONTEXT MENUS
 ════════════════════════════════════════════════════ -->
@@ -2115,6 +2259,7 @@
     <script src="/static/js/tools.js"></script>
     <script src="/static/js/keybindings.js"></script>
     <script src="/static/js/ui.js"></script>
+    <script src="/static/js/plans.js"></script>
 
 </body>
 

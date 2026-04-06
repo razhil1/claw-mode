@@ -494,5 +494,59 @@ function updateEditorTheme(theme) {
     }
 }
 
-function showLangPicker() { showToast('Language picker coming soon', 'info'); }
-function showIndentMenu() { showToast('Indent settings in Editor preferences', 'info'); }
+function showLangPicker() {
+    const langs = ['JavaScript','TypeScript','Python','HTML','CSS','JSON','Markdown','C++','Java','Go','Rust','SQL','Shell','YAML','XML'];
+    const current = document.getElementById('sbLang')?.textContent || 'Plain Text';
+    let html = '<div style="max-height:300px;overflow-y:auto">';
+    langs.forEach(l => {
+        const active = l === current ? 'style="background:var(--accent);color:#fff"' : '';
+        html += `<div class="ctx-item" ${active} onclick="setEditorLang('${l}')">${l}</div>`;
+    });
+    html += '</div>';
+    showQuickPicker('Language Mode', html);
+}
+function showIndentMenu() {
+    const html = `<div>
+        <div class="ctx-item" onclick="setIndent(2)">2 Spaces</div>
+        <div class="ctx-item" onclick="setIndent(4)">4 Spaces</div>
+        <div class="ctx-item" onclick="setIndent('tab')">Tabs</div>
+    </div>`;
+    showQuickPicker('Indentation', html);
+}
+function setEditorLang(lang) {
+    const el = document.getElementById('sbLang');
+    if (el) el.textContent = lang;
+    if (_cmEditor) {
+        const modeMap = {javascript:'javascript',typescript:'javascript',python:'python',html:'htmlmixed',css:'css',json:'application/json',markdown:'markdown',sql:'sql',shell:'shell',yaml:'yaml',xml:'xml'};
+        const mode = modeMap[lang.toLowerCase()] || 'text/plain';
+        _cmEditor.setOption('mode', mode);
+    }
+    hideQuickPicker();
+    showToast('Language: ' + lang, 'info');
+}
+function setIndent(size) {
+    if (_cmEditor) {
+        if (size === 'tab') { _cmEditor.setOption('indentWithTabs', true); _cmEditor.setOption('tabSize', 4); }
+        else { _cmEditor.setOption('indentWithTabs', false); _cmEditor.setOption('tabSize', size); _cmEditor.setOption('indentUnit', size); }
+    }
+    hideQuickPicker();
+    const el = document.getElementById('sbIndent');
+    if (el) el.textContent = size === 'tab' ? 'Tab Size: 4' : `Spaces: ${size}`;
+    showToast('Indent: ' + (size === 'tab' ? 'Tabs' : size + ' spaces'), 'info');
+}
+function showQuickPicker(title, html) {
+    let picker = document.getElementById('quickPicker');
+    if (!picker) {
+        picker = document.createElement('div');
+        picker.id = 'quickPicker';
+        picker.className = 'modal-overlay';
+        picker.onclick = function() { hideQuickPicker(); };
+        document.body.appendChild(picker);
+    }
+    picker.innerHTML = `<div class="modal-box small" onclick="event.stopPropagation()"><div class="modal-head"><h3>${title}</h3><button class="modal-close" onclick="hideQuickPicker()">&times;</button></div><div class="modal-body" style="padding:8px">${html}</div></div>`;
+    picker.style.display = 'flex';
+}
+function hideQuickPicker() {
+    const p = document.getElementById('quickPicker');
+    if (p) p.style.display = 'none';
+}

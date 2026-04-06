@@ -236,7 +236,15 @@ function killTerminal() {
 }
 
 function splitTerminal() {
-    showToast('Split terminal coming soon', 'info');
+    const panel = document.getElementById('terminalOutput');
+    if (!panel) { showToast('No terminal panel found', 'warning'); return; }
+    const existing = document.querySelectorAll('.terminal-split');
+    if (existing.length >= 3) { showToast('Max 3 terminal splits', 'warning'); return; }
+    const split = document.createElement('div');
+    split.className = 'terminal-split';
+    split.innerHTML = `<div class="term-split-header"><span>Terminal ${existing.length + 2}</span><button class="btn-ghost btn-xs" onclick="this.parentElement.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button></div><div class="term-output" style="height:120px;overflow-y:auto;font-family:var(--font-mono);font-size:12px;padding:8px;background:var(--bg-inset);border-top:1px solid var(--border-dim)"></div>`;
+    panel.parentElement.appendChild(split);
+    showToast('Terminal split added', 'info');
 }
 
 // ─── Run/Debug ───────────────────────────────────────────────────────────────

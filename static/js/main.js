@@ -410,7 +410,7 @@ function toggleDeviceView(type) {
 function toggleLayout(mode) { document.documentElement.setAttribute('data-layout', mode); }
 function cycleLayout() {}
 function showSettings() { document.getElementById('settingsModal').style.display = 'flex'; }
-function showProfileMenu() {}
+function showProfileMenu() { if (typeof showProfileModal === 'function') showProfileModal(); }
 function showAgentConfig() { showSettings(); }
 function showModelSelector() { document.getElementById('modelSelectorModal').style.display = 'flex'; }
 function toggleUltraMode() { showToast('Ultra Mode toggled'); }
@@ -429,8 +429,8 @@ function showGitPanel() {}
 function showNetlifyDeploy() {}
 function showVercelDeploy() {}
 function showKeyboardShortcuts() { document.getElementById('shortcutsModal').style.display = 'flex'; }
-function showGuide() {}
-function showApiDocs() {}
+function showGuide() { if (typeof showGuideModal === 'function') showGuideModal(); }
+function showApiDocs() { if (typeof showGuideModal === 'function') showGuideModal(); }
 function showAbout() {}
 
 function toggleChatExpand() {

@@ -87,7 +87,26 @@ function showGlobalSearch() { togglePanel('search'); document.getElementById('gl
 function toggleSearchCase() { NX.searchOpts.caseSensitive = !NX.searchOpts.caseSensitive; document.getElementById('gsCase')?.classList.toggle('active'); }
 function toggleSearchWord() { NX.searchOpts.wholeWord = !NX.searchOpts.wholeWord; document.getElementById('gsWord')?.classList.toggle('active'); }
 function toggleSearchRegex() { NX.searchOpts.regex = !NX.searchOpts.regex; document.getElementById('gsRegex')?.classList.toggle('active'); }
-function replaceAll() { showToast('Replace All: coming soon', 'info'); }
+function replaceAll() {
+    const searchVal = document.getElementById('globalSearchInput')?.value;
+    const replaceVal = document.getElementById('globalReplaceInput')?.value;
+    if (!searchVal) { showToast('Enter search text first', 'warn'); return; }
+    if (_cmEditor) {
+        const doc = _cmEditor.getValue();
+        const flags = NX.searchOpts?.caseSensitive ? 'g' : 'gi';
+        let pattern;
+        try {
+            pattern = NX.searchOpts?.regex ? new RegExp(searchVal, flags) : new RegExp(searchVal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+        } catch(e) { showToast('Invalid regex', 'error'); return; }
+        const count = (doc.match(pattern) || []).length;
+        if (count === 0) { showToast('No matches found', 'info'); return; }
+        const newDoc = doc.replace(pattern, replaceVal || '');
+        _cmEditor.setValue(newDoc);
+        showToast(`Replaced ${count} occurrence(s)`, 'success');
+    } else {
+        showToast('No editor open', 'warning');
+    }
+}
 
 // ─── Diff Viewer ─────────────────────────────────────────────────────────────
 async function loadDiff() {

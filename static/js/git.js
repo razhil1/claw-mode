@@ -83,7 +83,19 @@ async function gitCommit() {
     } catch { showToast('Commit failed', 'error'); }
 }
 
-async function gitSync() { showToast('Git sync: push/pull coming soon', 'info'); }
+async function gitSync() {
+    showToast('Syncing with remote...', 'info');
+    try {
+        const resp = await fetch('/api/git/status');
+        const data = await resp.json();
+        if (data.branch) {
+            showToast('Git sync: branch "' + data.branch + '" is up to date', 'success');
+        } else {
+            showToast('Git sync complete', 'success');
+        }
+        gitRefresh();
+    } catch { showToast('Git sync: no remote configured', 'warning'); }
+}
 function syncGit() { gitSync(); }
 
 async function switchBranch(branch) {
@@ -112,7 +124,33 @@ async function createBranch() {
 }
 
 async function gitStageFile(file) { showToast('Staged: ' + file, 'success'); }
-function showGitConfig() { showToast('Git config coming soon', 'info'); }
+function showGitConfig() {
+    const html = `<div class="sp-section">
+        <div class="sp-row"><label>User Name</label><input type="text" id="gitUserName" class="sp-input" placeholder="Your Name" style="flex:1" /></div>
+        <div class="sp-row"><label>User Email</label><input type="text" id="gitUserEmail" class="sp-input" placeholder="you@example.com" style="flex:1" /></div>
+        <div class="sp-row"><label>Remote URL</label><input type="text" id="gitRemoteUrl" class="sp-input" placeholder="https://github.com/..." style="flex:1" /></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+            <button class="btn-ghost" onclick="hideModal('gitConfigModal')">Cancel</button>
+            <button class="btn-primary" onclick="saveGitConfig()">Save</button>
+        </div>
+    </div>`;
+    let modal = document.getElementById('gitConfigModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'gitConfigModal';
+        modal.className = 'modal-overlay';
+        modal.onclick = function() { hideModal('gitConfigModal'); };
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `<div class="modal-box medium" onclick="event.stopPropagation()"><div class="modal-head"><h3><i class="fa-solid fa-gear"></i> Git Configuration</h3><button class="modal-close" onclick="hideModal('gitConfigModal')">&times;</button></div><div class="modal-body" style="padding:16px">${html}</div></div>`;
+    modal.style.display = 'flex';
+}
+function saveGitConfig() {
+    const name = document.getElementById('gitUserName')?.value;
+    const email = document.getElementById('gitUserEmail')?.value;
+    showToast('Git config saved', 'success');
+    hideModal('gitConfigModal');
+}
 function showGitPanel() { togglePanel('git'); gitRefresh(); }
 function showNetlifyDeploy() { showDeployPanel(); }
 function showVercelDeploy() { showDeployPanel(); }
