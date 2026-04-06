@@ -1741,10 +1741,11 @@
                                 <span>Key</span><span>Value</span><span></span>
                             </div>
                         </div>
-                        <button class="env-add-btn" onclick="addEnvVar()"><i class="fa-solid fa-plus"></i> Add
-                            Variable</button>
-                        <div class="env-note"><i class="fa-solid fa-lock"></i> Values are stored locally and never
-                            transmitted.</div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                            <button class="env-add-btn" onclick="addEnvVar()"><i class="fa-solid fa-plus"></i> Add Variable</button>
+                            <button class="env-add-btn" onclick="saveEnvVars()" style="background:var(--green);color:#000"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+                        </div>
+                        <div class="env-note"><i class="fa-solid fa-lock"></i> Stored in workspace .env file.</div>
                     </div>
 
                     <!-- Advanced Page -->

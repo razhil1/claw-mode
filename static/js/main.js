@@ -453,14 +453,6 @@ function downloadWorkspace() {
 }
 function triggerImport() { triggerUpload(); }
 
-function showGlobalSearch() {
-    const query = prompt('Search across all files:');
-    if (!query) return;
-    switchRightTab('terminal');
-    executeTerminalCommand(`grep -rn "${query.replace(/"/g, '\\"')}" . --include="*.py" --include="*.js" --include="*.html" --include="*.css" --include="*.ts" --include="*.json" --include="*.md" --include="*.txt" || echo "No matches found"`, output => {
-        if (_xterm) { output.split('\n').forEach(l => _xterm.writeln(l)); _xterm.write('\x1b[36m❯\x1b[0m '); }
-    });
-}
 
 function showAbout() {
     let modal = document.getElementById('aboutModal');

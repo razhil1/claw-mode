@@ -317,6 +317,8 @@ function switchSettingsPage(pg) {
     document.querySelectorAll('.sn-item').forEach(e => e.classList.remove('active'));
     const snt = document.querySelector(`.sn-item[data-page='${pg}']`);
     if (snt) snt.classList.add('active');
+
+    if (pg === 'env' && typeof loadEnvVars === 'function') loadEnvVars();
 }
 
 function saveSettings() {

@@ -412,7 +412,31 @@ async function runCurrentFile() {
     showToast(`Ran: ${NX.currentFile}`, 'success');
 }
 
-function debugProject() { showToast('Debug mode starting...', 'info'); togglePanel('debug'); }
+function debugProject() {
+    const currentFile = NX.currentFile || '';
+    const currentContent = _cmEditor ? _cmEditor.getValue() : '';
+
+    if (!currentFile) {
+        showToast('Open a file first to debug', 'warn');
+        return;
+    }
+
+    showToast('Starting debug analysis...', 'info');
+    switchRightTab('terminal');
+
+    const prompt = `Debug this file and find any issues: ${currentFile}`;
+    const modeSelect = document.getElementById('agentMode');
+    const prevMode = modeSelect ? modeSelect.value : 'auto';
+    if (modeSelect) modeSelect.value = 'debug';
+
+    const chatInput = document.getElementById('chatInput');
+    if (chatInput) {
+        chatInput.value = prompt;
+        const sendBtn = document.getElementById('chatSendBtn') || document.querySelector('[onclick*="sendChat"]');
+        if (sendBtn) sendBtn.click();
+        else if (typeof sendChat === 'function') sendChat();
+    }
+}
 function debugStepOver() { showToast('Step Over', 'info'); }
 function debugStepInto() { showToast('Step Into', 'info'); }
 function debugStepOut() { showToast('Step Out', 'info'); }
@@ -457,15 +481,57 @@ function showEnvManager() { showSettings(); switchSettingsPage('env'); }
 function showDockerPanel() { showEnvManager(); }
 
 // ─── Environment Variables ───────────────────────────────────────────────────
-function addEnvVar() {
+async function loadEnvVars() {
     const envList = document.getElementById('envList');
     if (!envList) return;
+    try {
+        const res = await fetch('/api/env');
+        const data = await res.json();
+        envList.innerHTML = '';
+        if (data.vars && data.vars.length) {
+            data.vars.forEach(v => _addEnvRow(envList, v.key, v.value));
+        }
+    } catch (e) {
+        console.error('Failed to load env vars:', e);
+    }
+}
+
+function _addEnvRow(envList, key, value) {
     const row = document.createElement('div');
     row.className = 'env-row';
     row.innerHTML = `
-        <input type="text" placeholder="KEY" class="env-key" />
-        <input type="text" placeholder="value" class="env-val" />
+        <input type="text" placeholder="KEY" class="env-key" value="${(key||'').replace(/"/g,'&quot;')}" />
+        <input type="text" placeholder="value" class="env-val" value="${(value||'').replace(/"/g,'&quot;')}" />
         <button onclick="this.parentElement.remove()" class="env-remove"><i class="fa-solid fa-trash"></i></button>
     `;
     envList.appendChild(row);
+}
+
+function addEnvVar() {
+    const envList = document.getElementById('envList');
+    if (!envList) return;
+    _addEnvRow(envList, '', '');
+}
+
+async function saveEnvVars() {
+    const envList = document.getElementById('envList');
+    if (!envList) return;
+    const rows = envList.querySelectorAll('.env-row');
+    const vars = [];
+    rows.forEach(row => {
+        const key = row.querySelector('.env-key')?.value?.trim();
+        const value = row.querySelector('.env-val')?.value?.trim();
+        if (key) vars.push({ key, value: value || '' });
+    });
+    try {
+        const res = await fetch('/api/env', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vars })
+        });
+        const data = await res.json();
+        showToast(data.message || 'Saved', 'success');
+    } catch (e) {
+        showToast('Failed to save env vars', 'error');
+    }
 }

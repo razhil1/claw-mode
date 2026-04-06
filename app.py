@@ -791,6 +791,53 @@ def set_atlas() -> Response:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ROUTES — ENVIRONMENT VARIABLES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _env_file_path() -> Path:
+    return _workspace_root() / ".env"
+
+@app.route("/api/env")
+def get_env_vars() -> Response:
+    env_path = _env_file_path()
+    env_vars: list[dict] = []
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, val = line.partition("=")
+                val = val.strip().strip("'\"")
+                env_vars.append({"key": key.strip(), "value": val})
+    return _ok(vars=env_vars)
+
+@app.route("/api/env", methods=["PUT"])
+def save_env_vars() -> Response:
+    data = request.get_json(silent=True) or {}
+    env_vars = data.get("vars", [])
+    lines: list[str] = []
+    for entry in env_vars:
+        key = str(entry.get("key", "")).strip()
+        val = str(entry.get("value", "")).strip()
+        if key:
+            lines.append(f"{key}={val}")
+    env_path = _env_file_path()
+    env_path.write_text("\n".join(lines) + "\n" if lines else "", encoding="utf-8")
+    return _ok(message="Environment variables saved.", count=len(lines))
+
+@app.route("/api/env/<key>", methods=["DELETE"])
+def delete_env_var(key: str) -> Response:
+    env_path = _env_file_path()
+    if not env_path.exists():
+        return _ok(message="No .env file found.")
+    lines = env_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    new_lines = [l for l in lines if not l.strip().startswith(f"{key}=")]
+    env_path.write_text("\n".join(new_lines) + "\n" if new_lines else "", encoding="utf-8")
+    return _ok(message=f"Removed {key}.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES — MODELS & MODE
 # ═══════════════════════════════════════════════════════════════════════════════
 
