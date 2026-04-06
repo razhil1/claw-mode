@@ -41,7 +41,8 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 - **Provider config:** `~/.config/nexus/providers.json`
 - **Default Model:** `nvidia:phi-4-mini-instruct`
 - **Agent workspace:** `./agent_workspace/`
-- **Max agent turns:** 16 per message
+- **Max agent turns:** 16 (builder), 12 (debugger), 10 (refactorer), 8 (researcher/reviewer)
+- **Efficiency:** Single-pass plan→execute→verify→done; no-progress detection after 4 turns; loop force-stop after 2 detections; max 2 retries per tool
 
 ## Plans & Licensing
 

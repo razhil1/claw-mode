@@ -48,13 +48,14 @@ from .toolbox import (
 # CONSTANTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-MAX_AGENT_TURNS        = 40    # Hard ceiling for any single run
-MAX_HISTORY_PAIRS      = 40    # Conversation pairs kept across sessions
-MAX_RETRIES            = 3     # Per-tool LLM-corrected retry limit
-LOOP_DETECT_WINDOW     = 6     # Turns scanned for repetitive cycle detection
-CONTEXT_COMPRESS_AT    = 16    # Compress history after N message pairs
-MAX_CONSECUTIVE_ERRORS = 6     # Error-cascade breaker threshold
-RESULT_TRIM_CHARS      = 2_500 # Tool output trimmed to this in history
+MAX_AGENT_TURNS        = 16    # Hard ceiling — forces concise, plan-driven execution
+MAX_HISTORY_PAIRS      = 30    # Conversation pairs kept across sessions
+MAX_RETRIES            = 2     # Per-tool retry limit — fail fast, don't burn tokens
+LOOP_DETECT_WINDOW     = 3     # Catch repetition early (3 identical calls = looping)
+CONTEXT_COMPRESS_AT    = 12    # Compress history proactively to save context
+MAX_CONSECUTIVE_ERRORS = 3     # Stop quickly on cascading failures
+RESULT_TRIM_CHARS      = 2_000 # Tool output trimmed to this in history
+NO_PROGRESS_TURNS      = 4     # Halt if no file changes after this many turns
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -109,7 +110,7 @@ TASK_MODES: dict[str, dict] = {
 #   read_only       : when True, write/exec tools are blocked at execution time
 _MODE_POLICIES: dict[str, dict] = {
     "builder": {
-        "max_turns":       40,
+        "max_turns":       16,
         "turn_type":       "coding",
         "preferred_model": "nvidia:qwen2.5-coder-32b",
         "tool_priority":   ["FileEditTool", "BashTool", "FilePatchTool",
@@ -117,7 +118,7 @@ _MODE_POLICIES: dict[str, dict] = {
         "read_only":       False,
     },
     "debugger": {
-        "max_turns":       30,
+        "max_turns":       12,
         "turn_type":       "debugging",
         "preferred_model": "nvidia:llama-3.3-70b-instruct",
         "tool_priority":   ["BashTool", "FileReadTool", "SearchTool",
@@ -125,7 +126,7 @@ _MODE_POLICIES: dict[str, dict] = {
         "read_only":       False,
     },
     "refactorer": {
-        "max_turns":       25,
+        "max_turns":       10,
         "turn_type":       "coding",
         "preferred_model": "nvidia:nemotron-super-49b",
         "tool_priority":   ["FileReadTool", "FilePatchTool", "FileEditTool",
@@ -133,7 +134,7 @@ _MODE_POLICIES: dict[str, dict] = {
         "read_only":       False,
     },
     "researcher": {
-        "max_turns":       15,
+        "max_turns":       8,
         "turn_type":       "thinking",
         "preferred_model": "nvidia:deepseek-r1-distill-llama-70b",
         "tool_priority":   ["SearchTool", "FileReadTool", "ListDirTool",
@@ -141,7 +142,7 @@ _MODE_POLICIES: dict[str, dict] = {
         "read_only":       True,
     },
     "reviewer": {
-        "max_turns":       15,
+        "max_turns":       8,
         "turn_type":       "thinking",
         "preferred_model": "nvidia:deepseek-r1-distill-llama-70b",
         "tool_priority":   ["FileReadTool", "SearchTool", "ListDirTool",
@@ -156,81 +157,82 @@ _MODE_POLICIES: dict[str, dict] = {
 
 SYSTEM_PROMPT = """\
 You are NEXUS — a senior autonomous full-stack developer agent embedded inside \
-NEXUS IDE. You think and work like the best engineer on a team: you plan before \
-you touch any code, you execute step-by-step with precision, explain your \
-reasoning clearly, and always verify your work before declaring it done.
+NEXUS IDE. You are efficient and precise. You plan once, execute each step \
+exactly once, and finish. You never repeat yourself or revisit completed work.
 
 Your sandbox is 'agent_workspace/'. You have full read/write/exec access to \
 every file and directory inside it. Treat it as a real production environment.
 
 ══════════════════════════════════════════
- OPERATING PROCEDURE (MANDATORY EVERY RUN)
+ CRITICAL: EFFICIENCY RULES
+══════════════════════════════════════════
+• You have a LIMITED number of turns. Every turn costs tokens. Be surgical.
+• NEVER re-read a file you already read this session.
+• NEVER re-edit a file you already edited unless a verification step found a bug.
+• NEVER repeat the same tool call twice with the same arguments.
+• If a tool call fails, analyse the error and try a DIFFERENT approach — \
+  do NOT retry the exact same thing.
+• Combine related work: if you need to create 3 files, plan all 3 upfront \
+  and execute them in sequence without re-planning.
+• When the task is done, STOP. Do not add unnecessary extras or loop back.
+
+══════════════════════════════════════════
+ OPERATING PROCEDURE
 ══════════════════════════════════════════
 
-── PHASE 1: ORIENT ──────────────────────
-Before touching anything, understand the current state:
+── PHASE 1: ORIENT (1 turn) ─────────────
+Quickly assess the workspace:
 • List the workspace root: TOOL: ListDirTool | .
-• Read every file you will modify BEFORE editing it.
-• Check for existing tests, configs, and dependencies.
-• If SESSION MEMORY exists (see below), use it — it captures what was built \
-  before and what the user prefers.
+• If SESSION MEMORY (.memory.md) exists, read it first — it has project context.
+• Read only the files directly relevant to the task.
 
-── PHASE 2: PLAN ────────────────────────
-On turn 0 (or whenever strategy changes), output a numbered plan AND briefly
-explain WHY you chose this approach (2–4 sentences max).
-Use this exact format — it's parsed by the IDE for step tracking:
+── PHASE 2: PLAN (1 turn) ──────────────
+Output a numbered plan. Keep it short — max 8 steps.
+Use this exact format (parsed by the IDE):
 
 PLAN:
 1. [STEP] <concise action>
 2. [STEP] <concise action>
 ...
 
-Approach: <why this plan makes sense given the current state and goal>
+Approach: <1–2 sentences — why this plan>
 
-Keep steps atomic (one file or one command per step).
+Each step = one tool call. Plan once, then execute. Do NOT re-plan mid-task \
+unless you discover something that fundamentally changes the approach.
 
 ── PHASE 3: EXECUTE ─────────────────────
-Issue exactly ONE tool call per turn. After EVERY tool result, write a brief
-"What I found / What this means" line before the next action. For example:
-  → Directory is empty — starting from scratch.
-  → Tests pass (3/3) — the change is safe to ship.
-  → Error on line 42: unused import — will patch it now.
+Follow your plan step by step. One tool call per turn.
+After each tool result, write ONE brief line about the outcome, then proceed.
 
 Rules:
-• ALWAYS read a file before editing it.
-• Use FilePatchTool for targeted edits. Use FileEditTool only for new files \
-  or complete rewrites.
-• After each write, verify with BashTool (run tests / lint) or FileReadTool.
-• If something unexpected appears in a tool result, stop and explain it before \
-  continuing — never silently skip surprises.
+• Read before write. Always.
+• Use FilePatchTool for targeted edits. FileEditTool only for new files.
+• If a tool result is unexpected, explain it and adapt — but do NOT start over.
 
-── PHASE 4: VERIFY ──────────────────────
-After every significant change:
-• Run the relevant test: TOOL: BashTool | python -m pytest <test_file> -x
-• Or check syntax: TOOL: BashTool | python -c "import <module>"
-• Explain the verification result: what passed, what it proves, what's next.
-• Fix any issues before moving on.
+── PHASE 4: VERIFY (1 turn) ────────────
+After the main work is done, run ONE verification:
+• TOOL: BashTool | python -c "import <module>" OR run tests.
+• If it passes, proceed to DONE. If it fails, fix the specific issue (1 turn).
 
 ── PHASE 5: UPDATE MEMORY ───────────────
-Before emitting DONE, update the session memory file so future sessions
-retain project context. Write to '.memory.md' inside agent_workspace/:
+Before finishing, update '.memory.md' so future sessions have context:
 
 TOOL: FileEditTool | .memory.md ::: <content>
 
-The memory file should capture (replace entirely each time):
+The memory file captures:
   # Project Memory
   Updated: <date>
   ## What exists
-  <brief description of files / stack / architecture>
+  <files / stack / architecture>
   ## What was done last
-  <what this session built or fixed, in 2–3 bullets>
+  <2–3 bullets>
   ## User preferences
-  <language, style choices, patterns the user likes>
+  <style, patterns>
   ## Known issues / next steps
-  <anything left to do or watch out for>
+  <what's left>
 
 ── PHASE 6: DONE ────────────────────────
-When the task is fully complete, end with a DONE block:
+When the task is complete, end with a DONE block:
 
 DONE:
 Summary: <one clear sentence — what was built/fixed>
@@ -460,24 +462,37 @@ class LoopDetector:
     def __init__(self, window: int = LOOP_DETECT_WINDOW) -> None:
         self._window  = window
         self._history: list[str] = []
+        self._loop_count = 0
 
     def record(self, tool_name: str, payload_hash: str) -> None:
         self._history.append(f"{tool_name}:{payload_hash}")
-        if len(self._history) > self._window * 2:
-            self._history = self._history[-self._window * 2:]
+        if len(self._history) > self._window * 3:
+            self._history = self._history[-self._window * 3:]
 
     def is_looping(self) -> bool:
         if len(self._history) < self._window:
             return False
         recent = self._history[-self._window:]
-        return len(set(recent)) <= 2
+        if len(set(recent)) <= 2:
+            self._loop_count += 1
+            return True
+        return False
+
+    @property
+    def should_force_stop(self) -> bool:
+        return self._loop_count >= 2
 
     def hint(self) -> str:
-        recent = self._history[-self._window:]
+        if self._loop_count >= 2:
+            return (
+                "LOOP DETECTED TWICE: You are stuck in a cycle. STOP NOW. "
+                "Emit a DONE block with what you have completed so far. "
+                "Do NOT make any more tool calls."
+            )
         return (
-            f"LOOP DETECTED: You've made {self._window} identical or highly repetitive tool calls. "
-            "CRITICAL: Stop repeating edits! If your changes aren't satisfying your goals, you might be editing the wrong file or missing a dependency. "
-            "Use SearchTool to find related code or ListDirTool to explore the full directory tree for better candidates."
+            f"LOOP DETECTED: You repeated the same call {self._window} times. "
+            "STOP and try a completely different approach. If stuck, emit DONE "
+            "with a summary of what was completed and what remains."
         )
 
 
@@ -1044,9 +1059,29 @@ class ClawAgent:
             if consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                 yield {
                     "type":    "error",
-                    "message": f"Halted: {consecutive_errors} consecutive errors.",
+                    "message": f"Halted: {consecutive_errors} consecutive errors. Review the approach and try a new prompt.",
                 }
                 break
+
+            # Force-stop on repeated loop detection
+            if loop_guard.should_force_stop:
+                yield {
+                    "type":    "error",
+                    "message": "Agent stopped: stuck in a repetitive loop. Try rephrasing or breaking the task into smaller parts.",
+                }
+                break
+
+            # No-progress detection — if no files changed after several turns, stop
+            if turn >= NO_PROGRESS_TURNS and not tracker.modified_paths() and not _read_only:
+                yield {
+                    "type": "thinking",
+                    "text": f"No files modified after {turn} turns — wrapping up to save tokens.",
+                }
+                messages.append({"role": "user", "content": (
+                    "[System] You have used several turns without making any file changes. "
+                    "Either complete the task now with a DONE block, or make the necessary "
+                    "edits immediately. Do not keep exploring without producing output."
+                )})
 
             total_turns = turn + 1
             # Mode policy overrides the task-class turn_type when set
@@ -1099,37 +1134,33 @@ class ClawAgent:
                 yield {"type": "thought", "text": thought}
 
             # ── PLAN extraction ────────────────────────────────────────────────
-            # Try extracting a plan on any turn until one is confirmed.
             if not plan_emitted:
                 plan = _extract_plan(response_text)
                 if plan:
                     plan_emitted = True
                     yield {"type": "plan", "text": plan}
-                    # Parse numbered steps from plan text for tracking
                     steps = re.findall(r"^\s*\d+[\.\)]\s+(.+)$", plan, re.MULTILINE)
                     if steps:
                         plan_steps.clear()
                         plan_steps.extend(steps)
                         yield {"type": "plan_steps", "steps": plan_steps}
-                else:
-                    # ── MANDATORY PLANNING GATE ───────────────────────────────
-                    # Until a PLAN: block is confirmed, block ALL tool execution
-                    # and completion — re-prompt on every turn until the model
-                    # provides a proper numbered plan.
+                elif turn == 0:
                     yield {
                         "type": "thinking",
-                        "text": "Planning phase required — requesting plan before execution…",
+                        "text": "Requesting plan before execution…",
                     }
                     messages.append({"role": "assistant", "content": response_text.strip() or "(empty)"})
                     messages.append({
                         "role":    "user",
                         "content": (
-                            "[System] You must output a PLAN: block with numbered steps "
-                            "BEFORE issuing any tool calls or finishing. Please produce your plan now."
+                            "[System] Output a PLAN: block with numbered steps before tool calls. "
+                            "Keep it concise — max 8 steps."
                         ),
                     })
                     full_content.append(response_text)
-                    continue  # re-enter loop to get plan
+                    continue
+                else:
+                    plan_emitted = True
 
             # ── emit clean prose ──────────────────────────────────────────────
             clean_prose = _strip_tool_lines(response_text)
