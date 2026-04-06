@@ -7,9 +7,17 @@ An AI-powered coding assistant and IDE built with Flask. Provides a web-based in
 - **Backend**: Flask (Python 3.11) — `app.py` is the main server
 - **Frontend**: Vanilla JS + CSS served via Flask templates (`templates/index.html`, `static/`)
 - **Agent logic**: `src/agent.py` (ClawAgent) and `src/ultraworker.py` (UltraWorker)
+- **Multi-agent**: `src/multi_agent.py` — Swarm mode with Architect/Coder/Reviewer/Terminal/Researcher specialists
 - **LLM client**: `src/llm.py` — supports NVIDIA, OpenAI, OpenRouter, Groq, Ollama
 - **Tool execution**: `src/toolbox.py` — sandboxed file I/O and bash execution
 - **Workspace**: `agent_workspace/` — isolated directory where AI agents operate
+- **Knowledge base**: `agent_workspace/.knowledge.md` — built-in coding patterns and best practices
+
+## Agent Modes
+
+1. **Standard** (ClawAgent): Single-agent with mode detection (builder/debugger/refactorer/researcher/reviewer). Uses weighted keyword scoring with word-boundary matching for accurate task classification.
+2. **Ultra** (UltraWorker): 40-turn deep reasoning loop with phased execution. Model tiers: Frontier (DeepSeek R1 70B for reasoning), Smart (Qwen 2.5 Coder 32B for implementation), Fast (Phi-4 Mini for quick tasks).
+3. **Swarm** (Multi-agent): Parallel specialist agents with task decomposition. Includes dependency-aware decomposition prompt to prevent file conflicts between agents.
 
 ## Running the App
 
