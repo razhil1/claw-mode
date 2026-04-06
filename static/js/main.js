@@ -563,9 +563,6 @@ function clearTerminal() {}
 function killTerminal() {}
 function stermKeyDown(e) {}
 function runStermCmd() {}
-function clearToolLog() {}
-function exportToolLog() {}
-function filterLogs(t) {}
 function loadDiff() {}
 function switchOutputSource(s) {}
 function clearOutput() {}

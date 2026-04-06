@@ -1108,6 +1108,32 @@ def multi_agent_roles() -> Response:
     return _ok(roles=roles)
 
 
+@app.route("/api/system/status")
+def system_status() -> Response:
+    import psutil
+    from src.toolbox import get_workspace_root
+    ws = get_workspace_root()
+    file_count = sum(1 for _ in ws.rglob("*") if _.is_file())
+    disk = psutil.disk_usage(str(ws))
+    mem = psutil.virtual_memory()
+    engines = {
+        "claw_agent": "idle",
+        "ultraworker": "active" if ULTRA_MODE else "standby",
+        "swarm": "idle",
+    }
+    active_sessions = len(_registry._agents) if hasattr(_registry, "_agents") else 0
+    return _ok(
+        workspace={"path": str(ws), "files": file_count},
+        cpu_percent=psutil.cpu_percent(interval=0.1),
+        memory={"used_gb": round(mem.used / 1e9, 2), "total_gb": round(mem.total / 1e9, 2), "percent": mem.percent},
+        disk={"used_gb": round(disk.used / 1e9, 2), "total_gb": round(disk.total / 1e9, 2), "percent": disk.percent},
+        engines=engines,
+        active_sessions=active_sessions,
+        ultra_mode=ULTRA_MODE,
+        active_model=ACTIVE_MODEL,
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTES — BRAIN SYNC / ATLAS
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -96,6 +96,16 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 - `error` — Error message
 - `key_error` — API key issue `{error_type, message}`
 - `stopped` — Agent stopped by user signal
+- `phase` / `ultra_phase` — UltraWorker phase indicator `{phase, label}` (THINK/REASON/PLAN/EXECUTE/VERIFY/UPDATE)
+
+## IDE Interface Features (Task #3 Upgrade)
+
+- **System Status panel** — Sidebar panel showing engine status (ClawAgent/UltraWorker/Swarm), CPU/RAM/disk usage, workspace info; auto-refreshes every 15 seconds
+- **UltraWorker phase indicators** — Animated phase badges (THINK→REASON→PLAN→EXECUTE→VERIFY→UPDATE) in agent panel and status bar
+- **Engine state badges** — Status bar shows paw/bolt/swarm icons with idle/standby/active states
+- **Enhanced swarm agent cards** — Role emoji, description, turn count, file count, progress bar with architecture-aligned colors
+- **Upgraded tool log** — Color-coded entries with architecture-aligned tool colors, timestamps, type badges, payload preview
+- **API endpoint:** `GET /api/system/status` — Returns CPU, memory, disk, engine states, workspace info
 
 ## Security
 
@@ -116,6 +126,7 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 - Python 3.11+
 - Flask 3.x, Flask-SQLAlchemy, Flask-Login
 - openai (Python package, multi-provider)
+- psutil (system monitoring)
 - psycopg2-binary (PostgreSQL)
 - PyInstaller (for EXE builds)
 

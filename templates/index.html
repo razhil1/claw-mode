@@ -309,6 +309,9 @@
                 <button class="ab-btn" data-panel="docker" onclick="togglePanel('docker')" title="Docker">
                     <i class="fa-brands fa-docker"></i>
                 </button>
+                <button class="ab-btn" data-panel="system" onclick="togglePanel('system')" title="System Status">
+                    <i class="fa-solid fa-gauge-high"></i>
+                </button>
                 <button class="ab-btn" data-panel="extensions" onclick="togglePanel('extensions')" title="Extensions">
                     <i class="fa-solid fa-puzzle-piece"></i>
                 </button>
@@ -588,6 +591,19 @@
                         </div>
                     </div>
 
+                    <!-- UltraWorker Phase Indicator -->
+                    <div class="ultra-phase-section" id="ultraPhaseSection" style="display:none">
+                        <div class="sp-sub-label">UltraWorker Phases</div>
+                        <div class="ultra-phase-track" id="ultraPhaseTrack">
+                            <div class="uph" data-phase="THINK"><span class="uph-icon">🧠</span><span class="uph-label">Think</span></div>
+                            <div class="uph" data-phase="REASON"><span class="uph-icon">🔍</span><span class="uph-label">Reason</span></div>
+                            <div class="uph" data-phase="PLAN"><span class="uph-icon">📋</span><span class="uph-label">Plan</span></div>
+                            <div class="uph" data-phase="EXECUTE"><span class="uph-icon">⚡</span><span class="uph-label">Execute</span></div>
+                            <div class="uph" data-phase="VERIFY"><span class="uph-icon">✅</span><span class="uph-label">Verify</span></div>
+                            <div class="uph" data-phase="UPDATE"><span class="uph-icon">💾</span><span class="uph-label">Update</span></div>
+                        </div>
+                    </div>
+
                     <!-- Memory Summary -->
                     <div class="agent-memory-section">
                         <div class="sp-sub-label">
@@ -596,6 +612,61 @@
                             <button class="sp-inline-btn danger" onclick="clearMemory()">Clear</button>
                         </div>
                         <div class="memory-summary" id="memorySummary">No memories yet.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ======= SYSTEM STATUS PANEL ======= -->
+            <div class="sp-section" id="panel-system">
+                <div class="sp-header">
+                    <span class="sp-title">System Status</span>
+                    <div class="sp-header-actions">
+                        <button onclick="refreshSystemStatus()" title="Refresh"><i class="fa-solid fa-rotate"></i></button>
+                        <button onclick="togglePanel('system')" title="Close"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                <div class="system-status-body">
+                    <div class="sys-engines">
+                        <div class="sp-sub-label">Engine Status</div>
+                        <div class="sys-engine-row" id="sysEngClaw">
+                            <span class="sys-eng-dot idle"></span>
+                            <span class="sys-eng-name">ClawAgent</span>
+                            <span class="sys-eng-state" id="sysEngClawState">Idle</span>
+                        </div>
+                        <div class="sys-engine-row" id="sysEngUltra">
+                            <span class="sys-eng-dot standby"></span>
+                            <span class="sys-eng-name">UltraWorker</span>
+                            <span class="sys-eng-state" id="sysEngUltraState">Standby</span>
+                        </div>
+                        <div class="sys-engine-row" id="sysEngSwarm">
+                            <span class="sys-eng-dot idle"></span>
+                            <span class="sys-eng-name">Swarm</span>
+                            <span class="sys-eng-state" id="sysEngSwarmState">Idle</span>
+                        </div>
+                    </div>
+                    <div class="sys-resources">
+                        <div class="sp-sub-label">Resources</div>
+                        <div class="sys-res-row">
+                            <span class="sys-res-label"><i class="fa-solid fa-microchip"></i> CPU</span>
+                            <div class="sys-bar"><div class="sys-bar-fill" id="sysCpuBar" style="width:0%"></div></div>
+                            <span class="sys-res-val" id="sysCpuVal">0%</span>
+                        </div>
+                        <div class="sys-res-row">
+                            <span class="sys-res-label"><i class="fa-solid fa-memory"></i> RAM</span>
+                            <div class="sys-bar"><div class="sys-bar-fill" id="sysMemBar" style="width:0%"></div></div>
+                            <span class="sys-res-val" id="sysMemVal">0%</span>
+                        </div>
+                        <div class="sys-res-row">
+                            <span class="sys-res-label"><i class="fa-solid fa-hard-drive"></i> Disk</span>
+                            <div class="sys-bar"><div class="sys-bar-fill" id="sysDiskBar" style="width:0%"></div></div>
+                            <span class="sys-res-val" id="sysDiskVal">0%</span>
+                        </div>
+                    </div>
+                    <div class="sys-workspace-info">
+                        <div class="sp-sub-label">Workspace</div>
+                        <div class="sys-ws-stat"><i class="fa-solid fa-file"></i> <span id="sysWsFiles">0</span> files</div>
+                        <div class="sys-ws-stat"><i class="fa-solid fa-robot"></i> <span id="sysSessions">0</span> active sessions</div>
+                        <div class="sys-ws-stat"><i class="fa-solid fa-microchip"></i> Model: <span id="sysModel">—</span></div>
                     </div>
                 </div>
             </div>
@@ -1319,9 +1390,18 @@
         </div>
 
         <div class="sb-center">
+            <span class="sb-item sb-engine-indicator" id="sbEngineIndicator">
+                <span class="sb-eng-badge claw" id="sbEngClaw" title="ClawAgent"><i class="fa-solid fa-paw"></i></span>
+                <span class="sb-eng-badge ultra" id="sbEngUltra" title="UltraWorker"><i class="fa-solid fa-bolt"></i></span>
+                <span class="sb-eng-badge swarm" id="sbEngSwarm" title="Swarm"><i class="fa-solid fa-bees"></i></span>
+            </span>
             <span class="sb-item" id="sbAgentActivity">
                 <span class="sb-activity-dot" id="sbActivityDot"></span>
                 <span id="sbActivity">Agent ready</span>
+            </span>
+            <span class="sb-item sb-phase-badge" id="sbPhaseBadge" style="display:none">
+                <span id="sbPhaseIcon"></span>
+                <span id="sbPhaseLabel"></span>
             </span>
         </div>
 

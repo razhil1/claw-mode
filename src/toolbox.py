@@ -158,9 +158,15 @@ def tool_search(path: str, query: str) -> str:
 
 
 def tool_bash_run(command: str) -> str:
-    # Security: block access to IDE system files via bash
-    if "app.py" in command and "/app.py" not in command:
-        return "Security error: Access denied to IDE system files. Please strictly operate inside agent_workspace."
+    _blocked = re.compile(
+        r'(?:^|\s|&&|\|\||;)'
+        r'\s*(?:cat|rm|mv|cp|nano|vi|vim|code|python|node)\s+'
+        r'(?:\.\.[\\/])*(?:app\.py|main\.py|models\.py|src/|templates/|static/)',
+    )
+    if _blocked.search(command):
+        ws = str(get_workspace_root())
+        if not any(ws in tok for tok in command.split()):
+            return "Security error: Access denied to IDE system files. Please operate inside agent_workspace."
 
     try:
         workspace_cwd = get_workspace_root()

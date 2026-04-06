@@ -487,6 +487,11 @@ function handleStreamEvent(evt, contentDiv) {
 
     if (evt.type === 'phase') {
         updateStepBar(evt.phase || 'Working', evt.label || '');
+        updateUltraPhase(evt.phase, evt.label);
+    }
+
+    if (evt.type === 'ultra_phase') {
+        updateUltraPhase(evt.phase, evt.label || evt.text || '');
     }
 
     if (evt.type === 'stopped') {
@@ -679,6 +684,7 @@ function setAgentWorking(isWorking) {
         if (statusPill) { statusPill.textContent = 'Ready'; statusPill.className = 'agent-status-pill'; }
         document.body.classList.remove('agent-is-working');
         hideStepToolBadge();
+        clearUltraPhase();
     }
 }
 
@@ -1179,13 +1185,20 @@ function handleSwarmEvent(evt) {
                 cards.innerHTML = evt.tasks.map(t => {
                     const role = _swarmRoleInfo(t.role);
                     return `
-                        <div class="sa-card" id="sa-${t.id}" style="border-left: 3px solid ${role.color}">
+                        <div class="sa-card" id="sa-${t.id}" style="--sa-color: ${role.color}">
                             <div class="sa-header">
                                 <span class="sa-emoji">${role.emoji}</span>
-                                <span class="sa-name">${role.name}</span>
+                                <div class="sa-header-info">
+                                    <span class="sa-name">${role.name}</span>
+                                    <span class="sa-role-desc">${role.desc}</span>
+                                </div>
                                 <span class="sa-status sa-pending">Queued</span>
                             </div>
-                            <div class="sa-desc">${t.description}</div>
+                            <div class="sa-desc">${escapeHtml(t.description)}</div>
+                            <div class="sa-meta">
+                                <span class="sa-meta-item" id="sat-${t.id}"><i class="fa-solid fa-rotate"></i> 0 turns</span>
+                                <span class="sa-meta-item" id="saf-${t.id}"><i class="fa-solid fa-file"></i> 0 files</span>
+                            </div>
                             <div class="sa-progress"><div class="sa-progress-fill" id="sapf-${t.id}"></div></div>
                         </div>
                     `;
@@ -1244,6 +1257,10 @@ function handleSwarmEvent(evt) {
             }
             _updateAgentCard(evt.agent_id, `Done (${evt.turns_used}t, ${evt.elapsed_ms}ms)`, 'sa-done');
             _setProgress(evt.agent_id, 100);
+            const turnsEl = document.getElementById('sat-' + evt.agent_id);
+            if (turnsEl) turnsEl.innerHTML = `<i class="fa-solid fa-rotate"></i> ${evt.turns_used || 0} turns`;
+            const filesEl = document.getElementById('saf-' + evt.agent_id);
+            if (filesEl) filesEl.innerHTML = `<i class="fa-solid fa-file"></i> ${(evt.files_changed || []).length} files`;
             break;
 
         case 'orchestrator_done':
@@ -1255,13 +1272,13 @@ function handleSwarmEvent(evt) {
 }
 
 function _swarmRoleInfo(role) {
-    const defaults = { emoji: '🤖', name: role, color: '#58a6ff' };
+    const defaults = { emoji: '🤖', name: role, color: '#58a6ff', desc: 'General agent' };
     const map = {
-        architect: { emoji: '🏗️', name: 'Architect', color: '#58a6ff' },
-        coder: { emoji: '💻', name: 'Coder', color: '#3fb950' },
-        reviewer: { emoji: '🔍', name: 'Reviewer', color: '#d29922' },
-        terminal: { emoji: '⬛', name: 'Terminal', color: '#bc8cff' },
-        researcher: { emoji: '📚', name: 'Researcher', color: '#f85149' },
+        architect: { emoji: '🏗️', name: 'Architect', color: '#a78bfa', desc: 'Plans structure & APIs' },
+        coder: { emoji: '⚡', name: 'Coder', color: '#00d4ff', desc: 'Writes production code' },
+        reviewer: { emoji: '🔍', name: 'Reviewer', color: '#f59e0b', desc: 'Reviews & finds bugs' },
+        terminal: { emoji: '💻', name: 'Terminal', color: '#10b981', desc: 'Runs commands & tests' },
+        researcher: { emoji: '📚', name: 'Researcher', color: '#8b5cf6', desc: 'Reads docs & gathers context' },
     };
     return map[role] || defaults;
 }
@@ -1299,4 +1316,168 @@ function _appendSwarmOutput(agentId, text) {
     output.appendChild(el);
     output.scrollTop = output.scrollHeight;
     scrollChat();
+}
+
+function updateUltraPhase(phase, label) {
+    const section = document.getElementById('ultraPhaseSection');
+    const track = document.getElementById('ultraPhaseTrack');
+    const phaseBadge = document.getElementById('sbPhaseBadge');
+    const phaseIcon = document.getElementById('sbPhaseIcon');
+    const phaseLabel = document.getElementById('sbPhaseLabel');
+
+    if (!phase) return;
+
+    if (section) section.style.display = '';
+    if (track) {
+        track.querySelectorAll('.uph').forEach(el => {
+            el.classList.remove('active', 'done');
+            const p = el.dataset.phase;
+            const phases = ['THINK', 'REASON', 'PLAN', 'EXECUTE', 'VERIFY', 'UPDATE'];
+            const ci = phases.indexOf(phase.toUpperCase());
+            const ei = phases.indexOf(p);
+            if (ei < ci) el.classList.add('done');
+            if (p === phase.toUpperCase()) el.classList.add('active');
+        });
+    }
+
+    const icons = { THINK: '🧠', REASON: '🔍', PLAN: '📋', EXECUTE: '⚡', VERIFY: '✅', UPDATE: '💾' };
+    if (phaseBadge) {
+        phaseBadge.style.display = 'inline-flex';
+        if (phaseIcon) phaseIcon.textContent = icons[phase.toUpperCase()] || '⚙️';
+        if (phaseLabel) phaseLabel.textContent = phase;
+    }
+}
+
+function clearUltraPhase() {
+    const section = document.getElementById('ultraPhaseSection');
+    const phaseBadge = document.getElementById('sbPhaseBadge');
+    if (section) section.style.display = 'none';
+    if (phaseBadge) phaseBadge.style.display = 'none';
+    const track = document.getElementById('ultraPhaseTrack');
+    if (track) track.querySelectorAll('.uph').forEach(el => el.classList.remove('active', 'done'));
+}
+
+async function refreshSystemStatus() {
+    try {
+        const res = await fetch('/api/system/status');
+        const data = await res.json();
+        if (!data.ok) return;
+
+        const setBar = (id, pct) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.width = pct + '%';
+                el.className = 'sys-bar-fill' + (pct > 80 ? ' critical' : pct > 60 ? ' warning' : '');
+            }
+        };
+        const setVal = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+        setBar('sysCpuBar', data.cpu_percent || 0);
+        setVal('sysCpuVal', (data.cpu_percent || 0) + '%');
+        setBar('sysMemBar', data.memory?.percent || 0);
+        setVal('sysMemVal', (data.memory?.percent || 0) + '%');
+        setBar('sysDiskBar', data.disk?.percent || 0);
+        setVal('sysDiskVal', (data.disk?.percent || 0) + '%');
+        setVal('sysWsFiles', data.workspace?.files || 0);
+        setVal('sysSessions', data.active_sessions || 0);
+        setVal('sysModel', data.active_model || '—');
+
+        const engines = data.engines || {};
+        _updateEngineDot('sysEngClaw', 'sysEngClawState', engines.claw_agent);
+        _updateEngineDot('sysEngUltra', 'sysEngUltraState', engines.ultraworker);
+        _updateEngineDot('sysEngSwarm', 'sysEngSwarmState', engines.swarm);
+
+        _updateSbEngine('sbEngClaw', engines.claw_agent);
+        _updateSbEngine('sbEngUltra', engines.ultraworker);
+        _updateSbEngine('sbEngSwarm', engines.swarm);
+    } catch (e) {}
+}
+
+function _updateEngineDot(rowId, stateId, state) {
+    const row = document.getElementById(rowId);
+    const stateEl = document.getElementById(stateId);
+    if (!row) return;
+    const dot = row.querySelector('.sys-eng-dot');
+    if (dot) dot.className = 'sys-eng-dot ' + (state || 'idle');
+    if (stateEl) stateEl.textContent = (state || 'idle').charAt(0).toUpperCase() + (state || 'idle').slice(1);
+}
+
+function _updateSbEngine(id, state) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = 'sb-eng-badge ' + (state || 'idle');
+}
+
+function logToolCall(evt) {
+    NX.toolLog.push(evt);
+    const container = document.getElementById('toolLogEntries');
+    if (!container) return;
+
+    const empty = container.querySelector('.log-empty');
+    if (empty) empty.remove();
+
+    const entry = document.createElement('div');
+    const toolName = evt.tool || 'unknown';
+    const isFile = ['FileEditTool', 'FilePatchTool', 'FileReadTool', 'FileDeleteTool', 'ViewFileLinesTool'].includes(toolName);
+    const isBash = toolName === 'BashTool' || toolName === 'BashExec';
+    const isError = evt.type === 'tool_result' && evt.success === false;
+    const typeClass = isError ? 'log-error' : isBash ? 'bash-run' : isFile ? 'file-op' : 'tool-call';
+
+    const archColors = {
+        FileEditTool: '#a78bfa', FilePatchTool: '#a78bfa', FileReadTool: '#8b5cf6',
+        FileDeleteTool: '#f85149', BashTool: '#10b981', BashExec: '#10b981', ThinkTool: '#f59e0b',
+        ListDirTool: '#58a6ff', SearchTool: '#00d4ff', ViewFileLinesTool: '#8b5cf6',
+    };
+    const borderColor = archColors[toolName] || 'var(--cyan)';
+
+    entry.className = `log-entry ${typeClass}`;
+    entry.style.borderLeftColor = borderColor;
+    entry.dataset.logType = isError ? 'error' : isBash ? 'bash' : isFile ? 'file_op' : 'tool_call';
+
+    const time = new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const typeLabel = isError ? 'ERROR' : isBash ? 'BASH' : isFile ? 'FILE' : 'TOOL';
+    const typeCls = isError ? 'log-type-error' : isBash ? 'log-type-bash' : isFile ? 'log-type-file' : 'log-type-tool';
+
+    let detail = '';
+    if (evt.type === 'tool_call') {
+        detail = `<span class="log-payload">${escapeHtml((evt.payload || evt.summary || '').slice(0, 150))}</span>`;
+    } else if (evt.type === 'tool_result') {
+        const elapsed = evt.elapsed ? ` (${evt.elapsed}s)` : '';
+        detail = `<span class="log-result ${evt.success ? '' : 'log-result-err'}">${escapeHtml((evt.result || evt.summary || '').slice(0, 200))}${elapsed}</span>`;
+    }
+
+    entry.innerHTML = `
+        <div class="log-entry-header">
+            <span class="log-time">${time}</span>
+            <span class="log-entry-type ${typeCls}">${typeLabel}</span>
+            <span class="log-tool">${escapeHtml(toolName)}</span>
+        </div>
+        ${detail}
+    `;
+
+    container.appendChild(entry);
+    container.scrollTop = container.scrollHeight;
+}
+
+function clearToolLog() {
+    NX.toolLog = [];
+    const c = document.getElementById('toolLogEntries');
+    if (c) c.innerHTML = '<div class="log-empty">No tool calls yet</div>';
+}
+
+function exportToolLog() {
+    const lines = NX.toolLog.map(e => JSON.stringify(e)).join('\n');
+    const blob = new Blob([lines], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'tool_log.jsonl';
+    a.click();
+}
+
+function filterLogs(filter) {
+    document.querySelectorAll('.log-filter').forEach(b => b.classList.toggle('active', b.textContent.trim().toLowerCase().includes(filter === 'all' ? 'all' : filter)));
+    document.querySelectorAll('.log-entry').forEach(e => {
+        if (filter === 'all') { e.style.display = ''; return; }
+        e.style.display = (e.dataset.logType === filter) ? '' : 'none';
+    });
 }

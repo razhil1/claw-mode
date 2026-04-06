@@ -95,6 +95,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (toggle) toggle.checked = true;
     }
 
+    if (typeof refreshSystemStatus === 'function') {
+        refreshSystemStatus();
+        setInterval(refreshSystemStatus, 15000);
+    }
+
     console.log('%c⬡ NEXUS IDE v2.0 — Ready', 'color:#00d4ff;font-size:14px;font-weight:bold;');
 });
 

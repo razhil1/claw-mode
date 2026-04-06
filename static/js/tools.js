@@ -1,59 +1,6 @@
 'use strict';
 /* TOOLS.JS — Tool log, global search, diff viewer, output console, API tester, docker, database */
 
-// ─── Tool Log ────────────────────────────────────────────────────────────────
-function logToolCall(evt) {
-    NX.toolLog.push({
-        time: Date.now(),
-        tool: evt.tool || 'unknown',
-        type: evt.type || 'tool_call',
-        summary: evt.summary || '',
-        result: evt.result || '',
-    });
-    renderToolLog();
-    updateToolBadge();
-}
-
-function renderToolLog(filter = 'all') {
-    const container = document.getElementById('toolLogEntries');
-    if (!container) return;
-    let logs = NX.toolLog;
-    if (filter !== 'all') logs = logs.filter(l => {
-        if (filter === 'tool_call') return l.type === 'tool_call';
-        if (filter === 'file_op') return ['file_read','file_write','file_patch','ReadFile','WriteFile','PatchFile'].includes(l.tool);
-        if (filter === 'bash') return ['bash','BashExec'].includes(l.tool);
-        if (filter === 'error') return l.type === 'error';
-        return true;
-    });
-
-    if (!logs.length) { container.innerHTML = '<div class="log-empty">No tool calls yet</div>'; return; }
-
-    container.innerHTML = logs.slice(-50).reverse().map(l => {
-        const time = new Date(l.time).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-        const iconMap = { BashExec:'fa-solid fa-terminal', ReadFile:'fa-solid fa-file-lines', WriteFile:'fa-solid fa-file-pen', PatchFile:'fa-solid fa-scissors', WebSearch:'fa-solid fa-globe', WebFetch:'fa-solid fa-cloud-arrow-down' };
-        const icon = iconMap[l.tool] || 'fa-solid fa-wrench';
-        return `<div class="log-entry log-${l.type}">
-            <div class="log-header"><i class="${icon}"></i><span class="log-tool">${l.tool}</span><span class="log-time">${time}</span></div>
-            ${l.summary ? `<div class="log-summary">${escapeHtml(l.summary)}</div>` : ''}
-            ${l.result ? `<div class="log-result"><pre>${escapeHtml(l.result.slice(0,500))}</pre></div>` : ''}
-        </div>`;
-    }).join('');
-}
-
-function filterLogs(type) {
-    document.querySelectorAll('.log-filter').forEach(b => b.classList.remove('active'));
-    event?.target?.classList?.add('active');
-    renderToolLog(type);
-}
-
-function clearToolLog() { NX.toolLog = []; renderToolLog(); showToast('Tool log cleared', 'info'); }
-function exportToolLog() {
-    const content = NX.toolLog.map(l => `[${new Date(l.time).toISOString()}] ${l.tool}: ${l.summary}\n${l.result || ''}`).join('\n---\n');
-    const blob = new Blob([content], { type: 'text/plain' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'nexus-tool-log.txt'; a.click();
-    showToast('Tool log exported', 'success');
-}
-
 function showToolLog() { switchRightTab('logs'); }
 function updateToolBadge() { const badge = document.getElementById('rptab-terminal-badge'); if (badge && NX.toolLog.length) { badge.textContent = NX.toolLog.length; badge.style.display = ''; } }
 
