@@ -98,13 +98,16 @@ ACTIVE_MODEL  = os.environ.get("CLAW_MODEL", DEFAULT_MODEL)
 ULTRA_MODE    = os.environ.get("CLAW_ULTRA", "0") == "1"
 CORS_ORIGINS  = os.environ.get("CLAW_CORS", "*")
 
-# Directories to ignore in file listings and workspace maps.
-# IDE source directories are always excluded so they never appear in the explorer
-# even if CLAW_WORKSPACE is accidentally set to the project root.
+# Directories to always ignore in file listings (build artifacts, caches, etc.)
 _SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv",
-               ".next", "dist", "build", ".cache", ".mypy_cache", ".ruff_cache",
-               "src", "static", "templates", "tests", "assets", ".local",
-               ".uv", "__snapshots__"}
+               ".next", ".cache", ".mypy_cache", ".ruff_cache",
+               ".local", ".uv", "__snapshots__", ".npm"}
+
+# IDE system directories — only skipped at the top level of the workspace
+# to prevent hiding user project folders with the same names
+_IDE_SYSTEM_DIRS = {"src", "static", "templates"}
+
+_IDE_ROOT_RESOLVED = Path(__file__).resolve().parent
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -347,8 +350,12 @@ def _safe_path(rel: str) -> Path:
 
 def _walk_workspace() -> list[dict]:
     entries: list[dict] = []
+    ws_is_ide_root = WORKSPACE_DIR.resolve() == _IDE_ROOT_RESOLVED
     for root, dirs, filenames in os.walk(WORKSPACE_DIR):
-        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+        skip = set(_SKIP_DIRS)
+        if ws_is_ide_root and Path(root).resolve() == _IDE_ROOT_RESOLVED:
+            skip |= _IDE_SYSTEM_DIRS
+        dirs[:] = [d for d in dirs if d not in skip]
         for name in filenames:
             if name.startswith((".memory", ".atlas")):
                 continue
