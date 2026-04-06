@@ -1912,13 +1912,25 @@ def telegram_setup() -> Response:
     token = data.get("token", "")
     from src.telegram_bot import set_bot_token
     ok, msg = set_bot_token(token)
+    if ok and data.get("set_webhook"):
+        domain = data.get("domain", request.host_url.rstrip("/"))
+        from src.telegram_bot import set_webhook
+        set_webhook(domain)
     return jsonify({"success": ok, "message": msg}), (200 if ok else 400)
 
 @app.route("/api/telegram/status")
 def telegram_status() -> Response:
-    from src.telegram_bot import get_bot_token
-    token = get_bot_token()
-    return jsonify({"configured": bool(token), "masked_token": token[:8] + "..." if token else ""})
+    from src.telegram_bot import get_bot_info
+    info = get_bot_info()
+    return jsonify(info)
+
+@app.route("/api/telegram/set-webhook", methods=["POST"])
+def telegram_set_webhook() -> Response:
+    data = request.json or {}
+    domain = data.get("domain", request.host_url.rstrip("/"))
+    from src.telegram_bot import set_webhook
+    ok, msg = set_webhook(domain)
+    return jsonify({"success": ok, "message": msg}), (200 if ok else 400)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # COMMUNITY & GUIDE
@@ -2030,11 +2042,28 @@ def anthropic_bridge() -> Response:
 if __name__ == "__main__":
     mode_label = "⚡ ULTRA" if ULTRA_MODE else "Standard"
     print("=" * 54)
-    print("  Claw IDE — Advanced Edition v5.0")
+    print("  NEXUS IDE — Advanced Edition v5.0")
     print(f"  Mode      : {mode_label}")
     print(f"  Model     : {ACTIVE_MODEL}")
     print(f"  Workspace : {WORKSPACE_DIR}")
     print(f"  Rate limit: {_limiter.max_calls} req / {_limiter.window_s}s")
     print("  URL       : http://localhost:5000")
     print("=" * 54)
+
+    import threading
+    def _auto_setup_telegram():
+        import time
+        time.sleep(3)
+        try:
+            dev_domain = os.environ.get("REPLIT_DEV_DOMAIN", "")
+            if dev_domain:
+                domain = f"https://{dev_domain}"
+            else:
+                domain = "http://localhost:5000"
+            from src.telegram_bot import auto_setup_webhook
+            auto_setup_webhook(domain)
+        except Exception as e:
+            logging.warning("Telegram auto-setup skipped: %s", e)
+    threading.Thread(target=_auto_setup_telegram, daemon=True).start()
+
     app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)

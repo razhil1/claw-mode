@@ -232,12 +232,12 @@
             const resp = await fetch('/api/telegram/setup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token }),
+                body: JSON.stringify({ token, set_webhook: true }),
             });
             const data = await resp.json();
             if (data.success) {
                 showToast(data.message, 'success');
-                document.getElementById('telegramStatus')?.classList.add('connected');
+                loadTelegramStatus();
             } else {
                 showToast(data.message, 'error');
             }
@@ -246,7 +246,41 @@
         }
     };
 
+    window.setupTelegramWebhook = async function() {
+        try {
+            const resp = await fetch('/api/telegram/set-webhook', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            const data = await resp.json();
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success) loadTelegramStatus();
+        } catch (e) {
+            showToast('Failed to set webhook', 'error');
+        }
+    };
+
+    async function loadTelegramStatus() {
+        try {
+            const resp = await fetch('/api/telegram/status');
+            const data = await resp.json();
+            const dot = document.getElementById('telegramStatus');
+            const name = document.getElementById('telegramBotName');
+            if (data.configured) {
+                if (dot) dot.classList.add('connected');
+                if (name) name.textContent = data.username ? `@${data.username} — Connected` : 'Connected';
+            } else {
+                if (dot) dot.classList.remove('connected');
+                if (name) name.textContent = 'Not configured';
+            }
+        } catch (e) {
+            console.warn('Telegram status check failed:', e);
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         loadPlans();
+        loadTelegramStatus();
     });
 })();

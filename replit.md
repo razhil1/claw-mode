@@ -39,9 +39,20 @@ The app runs on port 5000 and is configured as a webview workflow.
 - **Production (gunicorn)**: `gunicorn --bind 0.0.0.0:5000 main:app`
 - `main.py` imports `app` from `app.py` for gunicorn compatibility
 
+## Telegram Bot & Subscriptions
+
+- **Bot module**: `src/telegram_bot.py` — handles webhook commands (/start, /plans, /activate, /status, /support, /admin)
+- **Plans module**: `src/plans.py` — three tiers: Community (free), Pro ($19/mo), Enterprise ($49/mo)
+- **Admin**: @hiptyhezo (main developer) — has /admin commands (stats, users, licenses, grant, revoke, broadcast)
+- **Purchase flow**: User clicks Upgrade in IDE → gets purchase code → sends `/activate CODE` to bot → bot returns license key → user enters key in IDE
+- **Auto-webhook**: On startup, the app auto-registers the Telegram webhook to the current domain
+- **Frontend**: Plans modal (`static/js/plans.js`), Settings → Telegram page, profile modal
+- **Config storage**: `~/.config/nexus/telegram_bot.json` (bot state), `~/.config/nexus/plan.json` (license state)
+
 ## Environment Variables
 
 - `NVIDIA_API_KEY` — NVIDIA AI API key (set as Replit env var)
+- `TELEGRAM_BOT_TOKEN` — Telegram bot token for subscription management
 - `OPENAI_API_KEY` — OpenAI API key (optional)
 - `GROQ_API_KEY` — Groq API key (optional)
 - `CLAW_WORKSPACE` — workspace directory path (default: `agent_workspace/`)
@@ -57,5 +68,5 @@ Provider keys can also be configured via the IDE Settings panel — they are sto
 - `openai` — LLM API client (used for all providers via OpenAI-compatible APIs)
 - `tiktoken` — token counting for context window management
 - `psutil` — system monitoring (CPU/RAM metrics)
-- `requests` — HTTP client for Ollama discovery
+- `requests` — HTTP client for Ollama discovery and Telegram API
 - `gunicorn` — production WSGI server

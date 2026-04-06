@@ -1802,21 +1802,41 @@
                     <div class="settings-page" id="spage-telegram">
                         <h3><i class="fa-brands fa-telegram"></i> Telegram Bot</h3>
                         <div class="sp-section">
-                            <p style="color:var(--fg-dim);margin-bottom:12px">Connect a Telegram bot for purchase processing, support, and notifications.</p>
+                            <p style="color:var(--fg-dim);margin-bottom:12px">Telegram bot for subscription purchases, license activation, and user support.</p>
+                            <div class="sp-row">
+                                <label>Bot Status</label>
+                                <div id="telegramBotStatus" style="display:flex;align-items:center;gap:8px">
+                                    <span class="provider-dot" id="telegramStatus"></span>
+                                    <span id="telegramBotName" style="color:var(--fg-dim);font-size:13px">Checking...</span>
+                                </div>
+                            </div>
                             <div class="sp-row">
                                 <label>Bot Token</label>
                                 <div style="display:flex;gap:8px;flex:1">
-                                    <input type="password" id="telegramTokenInput" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" class="sp-input" style="flex:1" />
+                                    <input type="password" id="telegramTokenInput" placeholder="Paste bot token from @BotFather" class="sp-input" style="flex:1" />
                                     <button class="btn-primary btn-sm" onclick="setupTelegramBot()"><i class="fa-solid fa-plug"></i> Connect</button>
                                 </div>
                             </div>
                             <div class="sp-row">
-                                <label>Status</label>
-                                <span id="telegramStatus" class="provider-dot"></span>
+                                <label>Webhook</label>
+                                <div style="display:flex;gap:8px;align-items:center;flex:1">
+                                    <span id="telegramWebhookUrl" style="color:var(--fg-dim);font-size:12px;font-family:var(--font-mono);flex:1;overflow:hidden;text-overflow:ellipsis">Not configured</span>
+                                    <button class="btn-ghost btn-sm" onclick="setupTelegramWebhook()"><i class="fa-solid fa-link"></i> Set Webhook</button>
+                                </div>
                             </div>
                             <div class="sp-row">
-                                <label>Setup Guide</label>
-                                <span style="color:var(--fg-dim);font-size:12px">1. Message @BotFather on Telegram → /newbot<br>2. Copy the token → paste above → Connect</span>
+                                <label>Developer</label>
+                                <span style="color:var(--accent)">@hiptyhezo</span>
+                            </div>
+                            <div class="sp-row">
+                                <label>Bot Commands</label>
+                                <div style="color:var(--fg-dim);font-size:12px;line-height:1.8">
+                                    <code>/start</code> — Welcome menu<br>
+                                    <code>/plans</code> — View subscription plans<br>
+                                    <code>/activate CODE</code> — Activate purchase code<br>
+                                    <code>/status</code> — Check license status<br>
+                                    <code>/support</code> — Get help
+                                </div>
                             </div>
                         </div>
                     </div>
