@@ -413,28 +413,23 @@ async function runCurrentFile() {
 }
 
 function debugProject() {
-    const currentFile = NX.currentFile || '';
-    const currentContent = _cmEditor ? _cmEditor.getValue() : '';
+    const file = NX.currentFile || '';
 
-    if (!currentFile) {
+    if (!file) {
         showToast('Open a file first to debug', 'warn');
         return;
     }
 
     showToast('Starting debug analysis...', 'info');
-    switchRightTab('terminal');
 
-    const prompt = `Debug this file and find any issues: ${currentFile}`;
-    const modeSelect = document.getElementById('agentMode');
-    const prevMode = modeSelect ? modeSelect.value : 'auto';
-    if (modeSelect) modeSelect.value = 'debug';
+    NX.taskMode = 'debug';
+    const modeBtn = document.querySelector('.task-mode-btn[data-mode="debug"]');
+    if (modeBtn) modeBtn.click();
 
-    const chatInput = document.getElementById('chatInput');
-    if (chatInput) {
-        chatInput.value = prompt;
-        const sendBtn = document.getElementById('chatSendBtn') || document.querySelector('[onclick*="sendChat"]');
-        if (sendBtn) sendBtn.click();
-        else if (typeof sendChat === 'function') sendChat();
+    const el = document.getElementById('chatPrompt');
+    if (el) {
+        el.value = `Debug this file and find any issues: ${file}`;
+        if (typeof sendPrompt === 'function') sendPrompt();
     }
 }
 function debugStepOver() { showToast('Step Over', 'info'); }
