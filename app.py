@@ -84,7 +84,7 @@ if not os.environ.get("NVIDIA_API_KEY"):
     log.warning("No NVIDIA_API_KEY set. AI features require a valid key.")
 
 WORKSPACE_DIR = Path(os.path.abspath(
-    os.environ.get("CLAW_WORKSPACE", ".")
+    os.environ.get("CLAW_WORKSPACE", "agent_workspace")
 ))
 os.environ["CLAW_WORKSPACE"] = str(WORKSPACE_DIR)
 WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
@@ -93,9 +93,13 @@ ACTIVE_MODEL  = os.environ.get("CLAW_MODEL", DEFAULT_MODEL)
 ULTRA_MODE    = os.environ.get("CLAW_ULTRA", "0") == "1"
 CORS_ORIGINS  = os.environ.get("CLAW_CORS", "*")
 
-# Directories to ignore in file listings and workspace maps
+# Directories to ignore in file listings and workspace maps.
+# IDE source directories are always excluded so they never appear in the explorer
+# even if CLAW_WORKSPACE is accidentally set to the project root.
 _SKIP_DIRS = {"node_modules", "__pycache__", ".git", "venv", ".venv",
-               ".next", "dist", "build", ".cache", ".mypy_cache", ".ruff_cache"}
+               ".next", "dist", "build", ".cache", ".mypy_cache", ".ruff_cache",
+               "src", "static", "templates", "tests", "assets", ".local",
+               ".uv", "__snapshots__"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
