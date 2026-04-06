@@ -1,0 +1,46 @@
+  NEXUS IDE ÔÇö EXE Builder
+  ========================
+
+[INFO] Creating build virtual environment...
+[INFO] Installing dependencies...
+
+[notice] A new release of pip is available: 25.3 -> 26.0.1
+[notice] To update, run: python.exe -m pip install --upgrade pip
+ERROR: To modify pip, please run the following command:
+C:\Users\Razhil\Downloads\claw-mode\claw-mode\.venv_build\Scripts\python.exe -m pip install -q --upgrade pip
+
+[notice] A new release of pip is available: 25.3 -> 26.0.1
+[notice] To update, run: python.exe -m pip install --upgrade pip
+
+[notice] A new release of pip is available: 25.3 -> 26.0.1
+[notice] To update, run: python.exe -m pip install --upgrade pip
+
+[INFO] Building NEXUS_IDE.exe ÔÇö this takes 1ÔÇô3 minutes...
+
+524 INFO: PyInstaller: 6.19.0, contrib hooks: 2026.4
+524 INFO: Python: 3.14.3
+565 INFO: Platform: Windows-11-10.0.26200-SP0
+565 INFO: Python environment: C:\Users\Razhil\Downloads\claw-mode\claw-mode\.venv_build
+3515 WARNING: Failed to collect submodules for 'openai.helpers' because importing 'openai.helpers' raised: openai._extras._common.MissingDependencyError:
+
+OpenAI error:
+
+    missing `numpy`
+
+This feature requires additional dependencies:
+
+    $ pip install openai[voice_helpers]
+8563 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\Razhil\\Downloads\\claw-mode\\claw-mode\\.venv_build\\Scripts\\pyinstaller.exe',
+ 'C:\\Users\\Razhil\\AppData\\Local\\Python\\pythoncore-3.14-64\\python314.zip',
+ 'C:\\Users\\Razhil\\AppData\\Local\\Python\\pythoncore-3.14-64\\DLLs',
+ 'C:\\Users\\Razhil\\AppData\\Local\\Python\\pythoncore-3.14-64\\Lib',
+ 'C:\\Users\\Razhil\\AppData\\Local\\Python\\pythoncore-3.14-64',
+ 'C:\\Users\\Razhil\\Downloads\\claw-mode\\claw-mode\\.venv_build',
+ 'C:\\Users\\Razhil\\Downloads\\claw-mode\\claw-mode\\.venv_build\\Lib\\site-packages',
+ 'C:\\Users\\Razhil\\Downloads\\claw-mode\\claw-mode']
+9023 INFO: Appending 'datas' from .spec
+ERROR: Unable to find 'C:\\Users\\Razhil\\Downloads\\claw-mode\\claw-mode\\models.py' when adding binary and data files.
+
+[ERROR] Build failed. Check the output above for details.
+Press any key to continue . . .

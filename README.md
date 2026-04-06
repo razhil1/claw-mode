@@ -278,44 +278,95 @@ Click the mode selector above the chat box to choose how the agent approaches yo
 
 ## Troubleshooting
 
+### Build error: "Unable to find models.py" (Windows .exe build)
+
+This was a bug in an older version of the build script. It listed a file that does not exist.
+
+**Fix:** Download the latest version of the project. The build script now checks whether each file exists before trying to include it, so this error no longer occurs.
+
+---
+
+### Build error: "To modify pip, please run python.exe -m pip install --upgrade pip"
+
+This happens on Windows when the build script uses the wrong command to upgrade pip.
+
+**Fix:** The build script has been corrected to use `python -m pip install --upgrade pip` instead of `pip install --upgrade pip`. Download the latest version and the error will not appear.
+
+---
+
+### Build warning: "missing numpy / openai.helpers" (Windows .exe build)
+
+```
+WARNING: Failed to collect submodules for 'openai.helpers' because ... missing numpy
+```
+
+This is just a **warning**, not an error. The part of OpenAI that needs numpy is the voice assistant feature, which NEXUS IDE does not use. The build continues and the exe works correctly. You can safely ignore this warning.
+
+---
+
+### Recommended Python version for building the .exe
+
+**Use Python 3.11 or 3.12.** Python 3.14 is extremely new (released early 2026) and some packages haven't been tested with it yet. If you run into unexpected build errors:
+
+1. Go to **https://python.org/downloads/release/python-3120/**
+2. Scroll down to **Files** → download **Windows installer (64-bit)**
+3. Install it (tick **"Add Python to PATH"**)
+4. Delete the `.venv_build` folder in the NEXUS IDE folder
+5. Run `build_exe.bat` again
+
+---
+
 ### "The browser doesn't open" or "http://localhost:5000 doesn't load"
 
-- Make sure the terminal/command prompt is still open (closing it stops the server)
+- Make sure the terminal/command prompt is still open — closing it stops the server
 - Try opening your browser manually and going to `http://localhost:5000`
-- Check that no other program is using port 5000. If so, close it
+- Check that no other program is using port 5000. If one is, close it or restart your PC
+
+---
 
 ### "The AI isn't responding" or "Connection error"
 
-- Go to **Settings** and check that your API key is saved (the dot should be green)
-- Make sure you have an internet connection (except for Ollama, which is local)
-- Try clicking **Save & Test** again in the Settings panel
+- Go to **Settings** and check that your API key shows a green dot
+- Make sure you have an internet connection (Ollama is the only offline option)
+- Click **Save & Test** again in the Settings panel to recheck the connection
+
+---
 
 ### "pip is not recognized" (Windows)
 
-- You need to reinstall Python and make sure to tick **"Add Python to PATH"**
-- After reinstalling, close and reopen Command Prompt
+You need to reinstall Python and make sure to tick **"Add Python to PATH"** during setup.
+After reinstalling, close and reopen Command Prompt before trying again.
 
-### "Permission denied" (Mac/Linux)
+---
 
-Run this command in your terminal:
+### "Permission denied: ./start.sh" (Mac/Linux)
+
+Run this once in your terminal to make the script executable:
+
 ```bash
 chmod +x start.sh
 ```
 
+---
+
 ### "The .exe crashes immediately" (Windows)
 
-- Make sure you have the full `dist\` folder, not just the .exe file
-- Try running it from Command Prompt to see the error message:
-  ```
-  cd path\to\dist
-  NEXUS_IDE.exe
-  ```
+Run it from Command Prompt so you can see the error message:
+
+```
+cd C:\path\to\dist
+NEXUS_IDE.exe
+```
+
+Read what it prints — the error message will tell you exactly what's wrong.
+
+---
 
 ### "Ollama models aren't showing up"
 
-- Make sure Ollama is running: open a terminal and type `ollama serve`
-- Make sure you've pulled at least one model: `ollama pull llama3.2`
-- In NEXUS IDE Settings → Ollama → click **Connect** to refresh the model list
+- Make sure Ollama is running. Open a terminal and type: `ollama serve`
+- Make sure you have pulled at least one model: `ollama pull llama3.2`
+- In NEXUS IDE → Settings → Ollama card → click **Connect** to refresh
 
 ---
 

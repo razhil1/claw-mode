@@ -9,21 +9,31 @@ from pathlib import Path
 
 ROOT = Path(SPECPATH)  # directory containing this .spec file
 
+
+def _add_if_exists(src, dest):
+    """Return (src, dest) tuple only if src exists — avoids build errors."""
+    if os.path.exists(str(src)):
+        return [(str(src), dest)]
+    return []
+
+
 # ── Data files to bundle ──────────────────────────────────────────────────────
-# Format: (source_path, destination_folder_inside_bundle)
-datas = [
-    # Flask templates and static assets
-    (str(ROOT / "templates"),     "templates"),
-    (str(ROOT / "static"),        "static"),
-    # Source package
-    (str(ROOT / "src"),           "src"),
-    # Agent workspace skeleton (creates the folder; actual files stay outside)
-    (str(ROOT / "agent_workspace"), "agent_workspace"),
-    # Top-level Python files the app needs
-    (str(ROOT / "app.py"),        "."),
-    (str(ROOT / "models.py"),     "."),
-    (str(ROOT / "main.py"),       "."),
-]
+# Only include files/folders that actually exist in the project directory.
+datas = []
+
+# Required folders
+for folder, dest in [
+    ("templates",      "templates"),
+    ("static",         "static"),
+    ("src",            "src"),
+    ("agent_workspace","agent_workspace"),
+]:
+    if (ROOT / folder).exists():
+        datas.append((str(ROOT / folder), dest))
+
+# Optional root-level Python files (include whichever exist)
+for fname in ["app.py", "main.py", "models.py", "nexus_launcher.py"]:
+    datas.extend(_add_if_exists(ROOT / fname, "."))
 
 # ── Hidden imports ────────────────────────────────────────────────────────────
 # Packages that PyInstaller's static analysis misses because they use
@@ -63,7 +73,7 @@ hidden_imports = [
     "certifi",
     "charset_normalizer",
     "idna",
-    # psycopg2 (optional DB panel)
+    # psycopg2 (optional DB panel — skip gracefully if not installed)
     "psycopg2",
     "psycopg2.extras",
     # Standard library modules that sometimes get missed
@@ -82,16 +92,19 @@ hidden_imports = [
 ]
 
 # ── Collect entire packages (tiktoken needs its data files too) ───────────────
-from PyInstaller.utils.hooks import collect_all, collect_data_files
+from PyInstaller.utils.hooks import collect_all
 
 binaries  = []
 all_datas = list(datas)
 
 for pkg in ("tiktoken", "openai", "certifi"):
-    pkg_datas, pkg_binaries, pkg_hiddens = collect_all(pkg)
-    all_datas      += pkg_datas
-    binaries       += pkg_binaries
-    hidden_imports += pkg_hiddens
+    try:
+        pkg_datas, pkg_binaries, pkg_hiddens = collect_all(pkg)
+        all_datas      += pkg_datas
+        binaries       += pkg_binaries
+        hidden_imports += pkg_hiddens
+    except Exception as e:
+        print(f"[nexus.spec] Warning: could not collect all for {pkg}: {e}")
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
 a = Analysis(
@@ -104,12 +117,15 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Things we definitely do not need — trim the bundle size
+        # Trim bundle size — these are not needed by NEXUS IDE
         "matplotlib", "numpy", "pandas", "scipy", "PIL", "cv2",
         "tkinter", "PyQt5", "wx", "gi",
         "notebook", "IPython", "jupyter",
         "test", "unittest", "pytest",
         "sphinx", "docutils",
+        # Exclude the openai voice/numpy helper that triggers the numpy warning
+        "openai.helpers",
+        "openai._extras",
     ],
     noarchive=False,
 )
@@ -136,6 +152,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # Windows-only: set icon if icon file exists
-    icon=None,          # replace with "static/favicon.ico" if you have one
+    icon=None,
 )
