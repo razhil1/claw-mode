@@ -99,6 +99,15 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 - `stopped` — Agent stopped by user signal
 - `phase` / `ultra_phase` — UltraWorker phase indicator `{phase, label}` (THINK/REASON/PLAN/EXECUTE/VERIFY/UPDATE)
 
+## IDE Layout (3-Column Grid)
+
+- **Left column**: Agent panel (chat, modes, input, quick prompts)
+- **Center column**: Editor (top) + Bottom panel with tabs: Preview, Terminal, Tool Log, Diff, Output
+- **Right column**: File Explorer (collapsible via activity bar)
+- **Layout engine**: CSS Grid with `display: contents` on main-area for flat grid participation
+- **Grid template**: `activity-bar | agent-panel | center (editor+bottom) | side-panel`
+- **Resizable panels**: Agent panel (260-550px), side panel (180-400px) via edge-drag on grid boundaries
+
 ## IDE Interface Features (Task #3 Upgrade)
 
 - **System Status panel** — Sidebar panel showing engine status (ClawAgent/UltraWorker/Swarm), CPU/RAM/disk usage, workspace info; auto-refreshes every 15 seconds
@@ -107,6 +116,12 @@ A Flask-based web IDE that wraps an agentic AI coding assistant. The agent uses 
 - **Enhanced swarm agent cards** — Role emoji, description, turn count, file count, progress bar with architecture-aligned colors
 - **Upgraded tool log** — Color-coded entries with architecture-aligned tool colors, timestamps, type badges, payload preview
 - **API endpoint:** `GET /api/system/status` — Returns CPU, memory, disk, engine states, workspace info
+
+## Multi-Language Run Support
+
+- **Project detection** (F5 / Run Project): Next.js, Vite, Angular, Vue/Nuxt, npm/yarn/pnpm, Django, Flask, Cargo/Rust, Go, Ruby/Rails, Maven/Gradle Java, PHP/Laravel/Composer, Elixir/Phoenix, Dart/Flutter, Deno, CMake, Docker, Makefile
+- **File execution** (Run File): Python, JavaScript/Node, TypeScript (ts-node/tsx), Go, Rust, Ruby, PHP, Java, Kotlin, Scala, Swift, C/C++, C#, Dart, Lua, Perl, R, Julia, Haskell, Elixir, Erlang, Clojure, Lisp, OCaml, Nim, Zig, V, PowerShell, Bash, SQL
+- **Smart detection order**: Framework configs checked before generic `package.json` fallback
 
 ## Security
 

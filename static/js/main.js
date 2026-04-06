@@ -433,10 +433,7 @@ function showGuide() { if (typeof showGuideModal === 'function') showGuideModal(
 function showApiDocs() { if (typeof showGuideModal === 'function') showGuideModal(); }
 function showAbout() {}
 
-function toggleChatExpand() {
-    const r = document.getElementById('chatRegion');
-    r.style.flex = r.style.flex === '2' ? '1' : '2';
-}
+function toggleChatExpand() {}
 
 function quickPrompt(txt) { 
     const p = document.getElementById('chatPrompt');
@@ -552,7 +549,7 @@ function frReplaceOne() {}
 function frReplaceAll() {}
 function exportChat() {}
 function openPreviewInTab() {}
-function toggleRightPanel() { document.getElementById('rightPanel').style.display = document.getElementById('rightPanel').style.display === 'none' ? 'flex' : 'none'; }
+function toggleRightPanel() {}
 function navBack() {}
 function navForward() {}
 function switchTermTab(t) {}

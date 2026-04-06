@@ -142,14 +142,17 @@ function updateAccentColor(color) {
 function toggleLayout(mode) {
     document.documentElement.setAttribute('data-layout', mode);
     NX.layoutIdx = NX.layouts.indexOf(mode);
+    const layout = document.getElementById('nexusLayout');
     if (mode === 'zen') {
         document.getElementById('activityBar')?.classList.add('hidden');
         document.getElementById('sidePanel')?.classList.add('hidden');
         document.getElementById('statusBar')?.classList.add('hidden');
+        if (layout) layout.style.gridTemplateColumns = '0 0 1fr 0';
     } else {
         document.getElementById('activityBar')?.classList.remove('hidden');
         document.getElementById('sidePanel')?.classList.remove('hidden');
         document.getElementById('statusBar')?.classList.remove('hidden');
+        if (layout) layout.style.gridTemplateColumns = '';
     }
 }
 
@@ -162,22 +165,33 @@ function cycleLayout() {
 function toggleActivity() {
     const ab = document.getElementById('activityBar');
     const sp = document.getElementById('sidePanel');
+    const layout = document.getElementById('nexusLayout');
     if (ab) ab.classList.toggle('hidden');
     if (sp) sp.classList.toggle('hidden');
     NX.sidePanelVisible = !NX.sidePanelVisible;
+    if (layout) {
+        if (NX.sidePanelVisible) {
+            layout.style.gridTemplateColumns = '';
+        } else {
+            layout.style.gridTemplateColumns = `var(--activity-bar-w) var(--agent-panel-w) 1fr 0`;
+        }
+    }
 }
 
 function toggleRightPanel() {
     const rp = document.getElementById('rightPanel');
-    const rh = document.getElementById('rightResizeHandle');
     const btn = document.getElementById('termToggleBtn');
+    const layout = document.getElementById('nexusLayout');
     if (rp) {
         NX.rightPanelVisible = !NX.rightPanelVisible;
-        rp.style.display = NX.rightPanelVisible ? '' : 'none';
-        if (rh) rh.style.display = NX.rightPanelVisible ? '' : 'none';
+        if (NX.rightPanelVisible) {
+            rp.classList.remove('collapsed');
+            if (layout) layout.style.gridTemplateRows = '1fr var(--bottom-panel-h)';
+        } else {
+            rp.classList.add('collapsed');
+            if (layout) layout.style.gridTemplateRows = '1fr 0';
+        }
         if (btn) btn.classList.toggle('active', NX.rightPanelVisible);
-        
-        // If uncollapsing, ensure fit xterm
         if (NX.rightPanelVisible && typeof fitTerminal === 'function') {
             setTimeout(fitTerminal, 100);
         }
@@ -185,32 +199,34 @@ function toggleRightPanel() {
 }
 
 function toggleChatExpand() {
-    const r = document.getElementById('chatRegion');
-    const e = document.getElementById('editorRegion');
-    if (r.style.flex === '3') {
-        r.style.flex = '';
-        e.style.flex = '';
+    const layout = document.getElementById('nexusLayout');
+    if (!layout) return;
+    const current = layout.style.gridTemplateColumns;
+    if (current && current.includes('1fr 0')) {
+        layout.style.gridTemplateColumns = '';
     } else {
-        r.style.flex = '3';
-        e.style.flex = '0.5';
+        layout.style.gridTemplateColumns = `var(--activity-bar-w) 1fr 0 0`;
     }
 }
 
 // ─── Panel Navigation ────────────────────────────────────────────────────────
 function togglePanel(name) {
     const sp = document.getElementById('sidePanel');
+    const layout = document.getElementById('nexusLayout');
     const currentActive = document.querySelector('.sp-section.active');
     const target = document.getElementById('panel-' + name);
 
     if (currentActive === target && NX.sidePanelVisible) {
         if (sp) sp.classList.add('hidden');
         NX.sidePanelVisible = false;
+        if (layout) layout.style.gridTemplateColumns = `var(--activity-bar-w) var(--agent-panel-w) 1fr 0`;
         document.querySelectorAll('.ab-btn').forEach(b => b.classList.remove('active'));
         return;
     }
 
     if (sp) sp.classList.remove('hidden');
     NX.sidePanelVisible = true;
+    if (layout) layout.style.gridTemplateColumns = '';
 
     document.querySelectorAll('.sp-section').forEach(el => el.classList.remove('active'));
     if (target) target.classList.add('active');
@@ -390,9 +406,85 @@ async function checkApiKey() {
 
 // ─── Resize Handles ──────────────────────────────────────────────────────────
 function initResizeHandles() {
-    _setupResize('resizeHandleV', 'sidePanel', 'horizontal', 180, 500);
-    _setupResize('resizeHandleH', 'editorRegion', 'vertical', 100, null);
-    _setupResize('rightResizeHandle', 'rightPanel', 'horizontal-right', 200, 700);
+    _setupGridResize();
+}
+
+function _setupGridResize() {
+    const layout = document.getElementById('nexusLayout');
+    if (!layout) return;
+
+    const chatRegion = document.getElementById('chatRegion');
+    const sidePanel = document.getElementById('sidePanel');
+
+    function getEdgePositions() {
+        const layoutRect = layout.getBoundingClientRect();
+        const edges = [];
+        if (chatRegion) {
+            const cr = chatRegion.getBoundingClientRect();
+            edges.push({
+                x: cr.right - layoutRect.left,
+                cursor: 'col-resize',
+                min: 260, max: 550,
+                variable: '--agent-panel-w',
+                direction: 1
+            });
+        }
+        if (sidePanel && !sidePanel.classList.contains('hidden')) {
+            const sp = sidePanel.getBoundingClientRect();
+            edges.push({
+                x: sp.left - layoutRect.left,
+                cursor: 'col-resize',
+                min: 180, max: 400,
+                variable: '--side-panel-w',
+                direction: -1
+            });
+        }
+        return edges;
+    }
+
+    layout.addEventListener('mousemove', e => {
+        if (layout._resizing) return;
+        const rect = layout.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const edges = getEdgePositions();
+        let cursor = '';
+        for (const edge of edges) {
+            if (Math.abs(x - edge.x) < 5) { cursor = edge.cursor; break; }
+        }
+        layout.style.cursor = cursor;
+    });
+
+    layout.addEventListener('mousedown', e => {
+        const rect = layout.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const edges = getEdgePositions();
+        let hitEdge = null;
+        for (const edge of edges) {
+            if (Math.abs(x - edge.x) < 5) { hitEdge = edge; break; }
+        }
+        if (!hitEdge) return;
+        e.preventDefault();
+        layout._resizing = true;
+        document.body.classList.add('resizing');
+        const startX = e.clientX;
+        const startVal = parseFloat(getComputedStyle(document.documentElement).getPropertyValue(hitEdge.variable));
+
+        const onMove = ev => {
+            let delta = (ev.clientX - startX) * hitEdge.direction;
+            let newVal = startVal + delta;
+            if (newVal < hitEdge.min) newVal = hitEdge.min;
+            if (newVal > hitEdge.max) newVal = hitEdge.max;
+            document.documentElement.style.setProperty(hitEdge.variable, newVal + 'px');
+        };
+        const onUp = () => {
+            layout._resizing = false;
+            document.body.classList.remove('resizing');
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
 }
 
 function _setupResize(handleId, targetId, dir, min, max) {

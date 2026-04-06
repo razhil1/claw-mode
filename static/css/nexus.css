@@ -62,9 +62,10 @@
     /* Layout */
     --top-bar-h: 40px;
     --activity-bar-w: 48px;
-    --side-panel-w: 285px;
+    --side-panel-w: 260px;
+    --agent-panel-w: 380px;
     --status-bar-h: 24px;
-    --right-panel-w: 550px;
+    --bottom-panel-h: 280px;
 
     /* Fonts */
     --font-display: 'Syne', sans-serif;
@@ -659,7 +660,9 @@ a {
    NEXUS LAYOUT GRID
 ══════════════════════════════════════ */
 .nexus-layout {
-    display: flex;
+    display: grid;
+    grid-template-columns: var(--activity-bar-w) var(--agent-panel-w) 1fr var(--side-panel-w);
+    grid-template-rows: 1fr var(--bottom-panel-h);
     flex: 1;
     overflow: hidden;
     min-height: 0;
@@ -669,8 +672,8 @@ a {
    ACTIVITY BAR
 ══════════════════════════════════════ */
 .activity-bar {
-    width: var(--activity-bar-w);
-    min-width: var(--activity-bar-w);
+    grid-column: 1;
+    grid-row: 1 / -1;
     background: var(--bg-surface);
     border-right: 1px solid var(--border-dim);
     display: flex;
@@ -678,8 +681,8 @@ a {
     align-items: center;
     padding: 6px 0;
     gap: 2px;
-    flex-shrink: 0;
     z-index: 50;
+    overflow: hidden;
 }
 
 .ab-top {
@@ -757,20 +760,19 @@ a {
    SIDE PANEL
 ══════════════════════════════════════ */
 .side-panel {
-    width: var(--side-panel-w);
-    min-width: var(--side-panel-w);
+    grid-column: 4;
+    grid-row: 1 / -1;
     background: var(--bg-surface);
-    border-right: 1px solid var(--border-default);
+    border-left: 1px solid var(--border-default);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    flex-shrink: 0;
     transition: width var(--t-slow), min-width var(--t-slow);
 }
 
-.side-panel.collapsed {
-    width: 0;
-    min-width: 0;
+.side-panel.collapsed,
+.side-panel.hidden {
+    display: none;
 }
 
 /* Panel sections (toggled by activity bar) */
@@ -2360,26 +2362,29 @@ a {
 }
 
 /* ══════════════════════════════════════
-   MAIN AREA
+   MAIN AREA (display: contents — children join parent grid)
 ══════════════════════════════════════ */
 .main-area {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    min-width: 0;
+    display: contents;
+}
+
+/* Old resize handles between panels — hidden in grid layout */
+#resizeHandleV,
+#rightResizeHandle,
+#resizeHandleH {
+    display: none;
 }
 
 /* ══════════════════════════════════════
    EDITOR REGION
 ══════════════════════════════════════ */
 .editor-region {
-    flex: 1;
+    grid-column: 3;
+    grid-row: 1;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     min-height: 0;
-    border-right: 1px solid var(--border-dim);
     background: var(--bg-base);
 }
 
@@ -2798,16 +2803,17 @@ a {
 }
 
 /* ══════════════════════════════════════
-   CHAT REGION
+   CHAT REGION (Agent Panel — Left Column)
 ══════════════════════════════════════ */
 .chat-region {
+    grid-column: 2;
+    grid-row: 1 / -1;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     background: var(--bg-base);
     min-height: 0;
-    /* Default: taller chat view */
-    flex: 0 0 600px;
+    border-right: 1px solid var(--border-default);
 }
 
 /* Chat region header */
@@ -4121,23 +4127,20 @@ updating::before {
 }
 
 /* ══════════════════════════════════════
-   RIGHT PANEL
+   BOTTOM PANEL (Preview · Terminal · Logs)
 ══════════════════════════════════════ */
 .right-panel {
-    width: var(--right-panel-w);
-    min-width: var(--right-panel-w);
+    grid-column: 3;
+    grid-row: 2;
     display: flex;
     flex-direction: column;
     background: var(--bg-base);
-    border-left: 1px solid var(--border-default);
+    border-top: 1px solid var(--border-default);
     overflow: hidden;
-    flex-shrink: 0;
-    transition: width var(--t-slow), min-width var(--t-slow);
 }
 
 .right-panel.collapsed {
-    width: 0;
-    min-width: 0;
+    display: none;
 }
 
 /* Right Panel Tab Bar */
@@ -6684,17 +6687,31 @@ kbd {
 /* ══════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════ */
-@media (max-width: 900px) {
-    :root {
-        --right-panel-w: 0px;
-        --side-panel-w: 260px;
+@media (max-width: 1100px) {
+    .nexus-layout {
+        grid-template-columns: var(--activity-bar-w) 320px 1fr 0;
     }
 
-    .right-panel {
+    .side-panel {
         display: none;
     }
 
     .tb-token-counter {
+        display: none;
+    }
+}
+
+@media (max-width: 800px) {
+    .nexus-layout {
+        grid-template-columns: var(--activity-bar-w) 0 1fr 0;
+        grid-template-rows: 1fr var(--bottom-panel-h);
+    }
+
+    .chat-region {
+        display: none;
+    }
+
+    .side-panel {
         display: none;
     }
 
@@ -6704,15 +6721,15 @@ kbd {
 }
 
 @media (max-width: 640px) {
-    :root {
-        --side-panel-w: 0px;
+    .nexus-layout {
+        grid-template-columns: 0 0 1fr 0;
+        grid-template-rows: 1fr 0;
     }
 
-    .side-panel {
-        display: none;
-    }
-
-    .activity-bar {
+    .activity-bar,
+    .side-panel,
+    .chat-region,
+    .right-panel {
         display: none;
     }
 

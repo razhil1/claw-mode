@@ -256,18 +256,85 @@ async function runProject() {
     showToast('Running project...', 'info');
     switchRightTab('terminal');
 
-    // Try to detect the project type and run appropriate command
-    let cmd = 'echo "No run configuration found. Set up in Run > Run Configurations."';
-
-    // Check for common entry points
+    let cmd = null;
     const files = NX.allFiles.map(f => typeof f === 'object' ? f.path : f);
-    if (files.includes('package.json')) cmd = 'npm start';
-    else if (files.includes('main.py')) cmd = 'python main.py';
-    else if (files.includes('app.py')) cmd = 'python app.py';
-    else if (files.includes('index.html')) { refreshPreview(); return; }
-    else if (files.includes('Makefile')) cmd = 'make run';
-    else if (files.includes('Cargo.toml')) cmd = 'cargo run';
 
+    if (files.includes('next.config.js') || files.includes('next.config.mjs') || files.includes('next.config.ts'))
+        cmd = 'npx next dev';
+    else if (files.includes('vite.config.js') || files.includes('vite.config.ts'))
+        cmd = 'npx vite --host';
+    else if (files.includes('angular.json'))
+        cmd = 'npx ng serve --host 0.0.0.0';
+    else if (files.includes('vue.config.js') || files.includes('nuxt.config.ts') || files.includes('nuxt.config.js'))
+        cmd = 'npx nuxi dev || npx vue-cli-service serve';
+    else if (files.includes('package.json')) {
+        const hasPnpm = files.includes('pnpm-lock.yaml');
+        const hasYarn = files.includes('yarn.lock');
+        if (hasPnpm) cmd = 'pnpm start';
+        else if (hasYarn) cmd = 'yarn start';
+        else cmd = 'npm start';
+    }
+    else if (files.includes('manage.py'))
+        cmd = 'python manage.py runserver 0.0.0.0:8000';
+    else if (files.includes('main.py'))
+        cmd = 'python main.py';
+    else if (files.includes('app.py'))
+        cmd = 'python app.py';
+    else if (files.includes('run.py'))
+        cmd = 'python run.py';
+    else if (files.includes('server.py'))
+        cmd = 'python server.py';
+    else if (files.includes('requirements.txt') && files.includes('wsgi.py'))
+        cmd = 'gunicorn wsgi:app --bind 0.0.0.0:8000';
+    else if (files.includes('Cargo.toml'))
+        cmd = 'cargo run';
+    else if (files.includes('go.mod'))
+        cmd = 'go run .';
+    else if (files.includes('Gemfile'))
+        cmd = 'bundle exec ruby app.rb || bundle exec rails server -b 0.0.0.0';
+    else if (files.includes('pom.xml'))
+        cmd = 'mvn spring-boot:run || mvn exec:java';
+    else if (files.includes('build.gradle') || files.includes('build.gradle.kts'))
+        cmd = 'gradle run || ./gradlew run';
+    else if (files.includes('composer.json'))
+        cmd = 'php -S 0.0.0.0:8080 -t public || php artisan serve --host=0.0.0.0';
+    else if (files.includes('mix.exs'))
+        cmd = 'mix phx.server || mix run --no-halt';
+    else if (files.includes('pubspec.yaml'))
+        cmd = 'dart run || flutter run';
+    else if (files.includes('deno.json') || files.includes('deno.jsonc'))
+        cmd = 'deno task start || deno run --allow-all main.ts';
+    else if (files.includes('CMakeLists.txt'))
+        cmd = 'cmake --build build && ./build/main';
+    else if (files.includes('Makefile'))
+        cmd = 'make run';
+    else if (files.includes('Dockerfile'))
+        cmd = 'docker build -t app . && docker run -p 8080:8080 app';
+    else if (files.includes('docker-compose.yml') || files.includes('docker-compose.yaml'))
+        cmd = 'docker-compose up';
+    else if (files.includes('index.html'))
+        { refreshPreview(); return; }
+    else if (files.includes('main.go'))
+        cmd = 'go run main.go';
+    else if (files.includes('main.rs'))
+        cmd = 'rustc main.rs -o main && ./main';
+    else if (files.includes('Main.java'))
+        cmd = 'javac Main.java && java Main';
+    else if (files.includes('main.cpp') || files.includes('main.c'))
+        cmd = 'g++ -o main main.cpp && ./main || gcc -o main main.c && ./main';
+    else if (files.includes('main.rb'))
+        cmd = 'ruby main.rb';
+    else if (files.includes('main.swift'))
+        cmd = 'swift main.swift';
+    else if (files.includes('main.kt'))
+        cmd = 'kotlinc main.kt -include-runtime -d main.jar && java -jar main.jar';
+
+    if (!cmd) {
+        showToast('No run configuration detected. Use Run > Run Configurations to set one up.', 'warning');
+        return;
+    }
+
+    showToast(`Detected: ${cmd.split(' ')[0]}`, 'info');
     const result = await executeTerminalCommand(cmd);
     appendOutputLine(result, 'app');
 }
@@ -277,13 +344,61 @@ async function runCurrentFile() {
     switchRightTab('terminal');
 
     const ext = NX.currentFile.split('.').pop().toLowerCase();
+    const name = NX.currentFile.replace(/\.[^.]+$/, '');
     let cmd;
-    if (ext === 'py') cmd = `python ${NX.currentFile}`;
-    else if (ext === 'js') cmd = `node ${NX.currentFile}`;
-    else if (ext === 'sh') cmd = `bash ${NX.currentFile}`;
-    else if (ext === 'rs') cmd = `rustc ${NX.currentFile} && ./${NX.currentFile.replace('.rs', '')}`;
-    else if (ext === 'html') { refreshPreview(); return; }
-    else { showToast(`Cannot run .${ext} files directly`, 'warning'); return; }
+
+    const runners = {
+        'py':    `python "${NX.currentFile}"`,
+        'js':    `node "${NX.currentFile}"`,
+        'mjs':   `node "${NX.currentFile}"`,
+        'ts':    `npx ts-node "${NX.currentFile}" || npx tsx "${NX.currentFile}"`,
+        'tsx':   `npx tsx "${NX.currentFile}"`,
+        'jsx':   `node "${NX.currentFile}"`,
+        'sh':    `bash "${NX.currentFile}"`,
+        'bash':  `bash "${NX.currentFile}"`,
+        'zsh':   `zsh "${NX.currentFile}"`,
+        'rs':    `rustc "${NX.currentFile}" -o "${name}" && ./"${name}"`,
+        'go':    `go run "${NX.currentFile}"`,
+        'rb':    `ruby "${NX.currentFile}"`,
+        'php':   `php "${NX.currentFile}"`,
+        'java':  `javac "${NX.currentFile}" && java "${name}"`,
+        'kt':    `kotlinc "${NX.currentFile}" -include-runtime -d "${name}.jar" && java -jar "${name}.jar"`,
+        'scala': `scala "${NX.currentFile}"`,
+        'swift': `swift "${NX.currentFile}"`,
+        'c':     `gcc -o "${name}" "${NX.currentFile}" && ./"${name}"`,
+        'cpp':   `g++ -o "${name}" "${NX.currentFile}" && ./"${name}"`,
+        'cc':    `g++ -o "${name}" "${NX.currentFile}" && ./"${name}"`,
+        'cxx':   `g++ -o "${name}" "${NX.currentFile}" && ./"${name}"`,
+        'cs':    `dotnet script "${NX.currentFile}" || csc "${NX.currentFile}" && mono "${name}.exe"`,
+        'dart':  `dart run "${NX.currentFile}"`,
+        'lua':   `lua "${NX.currentFile}"`,
+        'pl':    `perl "${NX.currentFile}"`,
+        'r':     `Rscript "${NX.currentFile}"`,
+        'jl':    `julia "${NX.currentFile}"`,
+        'hs':    `runghc "${NX.currentFile}"`,
+        'ex':    `elixir "${NX.currentFile}"`,
+        'exs':   `elixir "${NX.currentFile}"`,
+        'erl':   `escript "${NX.currentFile}"`,
+        'clj':   `clojure "${NX.currentFile}"`,
+        'lisp':  `sbcl --script "${NX.currentFile}"`,
+        'ml':    `ocaml "${NX.currentFile}"`,
+        'nim':   `nim r "${NX.currentFile}"`,
+        'zig':   `zig run "${NX.currentFile}"`,
+        'v':     `v run "${NX.currentFile}"`,
+        'ps1':   `pwsh "${NX.currentFile}"`,
+        'bat':   `cmd /c "${NX.currentFile}"`,
+        'sql':   `sqlite3 < "${NX.currentFile}"`,
+        'html':  null,
+        'htm':   null,
+    };
+
+    if (ext in runners) {
+        cmd = runners[ext];
+        if (cmd === null) { refreshPreview(); return; }
+    } else {
+        showToast(`No runner configured for .${ext} files. Try the terminal directly.`, 'warning');
+        return;
+    }
 
     const result = await executeTerminalCommand(cmd);
     appendOutputLine(result, 'app');
