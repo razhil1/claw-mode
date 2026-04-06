@@ -5289,6 +5289,84 @@ updating::before {
     color: #4285f4;
 }
 
+.ollama-badge {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e0e0e0;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+
+.openrouter-badge {
+    background: rgba(108, 92, 231, 0.14);
+    color: #a29bfe;
+}
+
+.groq-badge {
+    background: rgba(255, 165, 0, 0.14);
+    color: #ffa500;
+}
+
+.custom-badge {
+    background: rgba(0, 212, 255, 0.1);
+    color: var(--cyan);
+}
+
+/* Provider status dot */
+.p-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+    margin: 0 4px;
+    background: var(--text-muted);
+    opacity: 0.4;
+    transition: background 0.2s, opacity 0.2s;
+}
+.p-status-dot.ok  { background: var(--green); opacity: 1; }
+.p-status-dot.off { background: var(--text-muted); opacity: 0.4; }
+
+.key-status-label {
+    font-size: 10.5px;
+    color: var(--text-muted);
+}
+
+/* Ollama highlight card */
+.ollama-card {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Hint text inside provider cards */
+.kpc-hint {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin: 2px 0 6px;
+    line-height: 1.5;
+}
+.kpc-hint code {
+    background: rgba(255,255,255,0.06);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+}
+
+/* Local tier badge on model cards */
+.mc-tier.local {
+    background: rgba(255,255,255,0.08);
+    color: #c8c8c8;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+
+/* Empty state inside model grid */
+.mc-empty {
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 32px;
+    width: 100%;
+}
+
 .kpc-sub {
     font-size: 10px;
     color: var(--text-muted);

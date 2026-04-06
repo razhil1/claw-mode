@@ -1375,25 +1375,42 @@
 
                     <!-- API Keys Page -->
                     <div class="settings-page active" id="spage-api">
-                        <div class="sp-desc">Configure provider API keys. Keys are stored in browser localStorage and
-                            never sent to any server other than the respective provider.</div>
+                        <div class="sp-desc">Configure API keys and local providers. Keys are saved on your machine in
+                            <code>~/.config/nexus/providers.json</code> — never in source code.</div>
 
-                        <!-- NVIDIA -->
+                        <!-- NVIDIA NIM (Free) -->
                         <div class="key-provider-card">
                             <div class="kpc-header">
                                 <div>
                                     <span class="kpc-badge nvidia-badge">🚀 NVIDIA NIM</span>
-                                    <span class="kpc-sub">Free · Access 100+ models at build.nvidia.com</span>
+                                    <span class="kpc-sub">Free · 100+ models at build.nvidia.com</span>
                                 </div>
+                                <span class="p-status-dot" id="pDot-nvidia"></span>
                                 <a href="https://build.nvidia.com" target="_blank" class="kpc-getkey">Get free key →</a>
                             </div>
                             <div class="key-input-row">
-                                <input type="password" id="nvidiaKeyInput" placeholder="nvapi-…" class="key-input"
-                                    autocomplete="off" />
-                                <button class="validate-btn" onclick="saveKey('nvidia')"><i
-                                        class="fa-solid fa-check"></i> Save &amp; Test</button>
+                                <input type="password" id="nvidiaKeyInput" placeholder="nvapi-…" class="key-input" autocomplete="off" />
+                                <button class="validate-btn" onclick="saveKey('nvidia')"><i class="fa-solid fa-check"></i> Save &amp; Test</button>
                             </div>
-                            <div class="key-status" id="nvidiaKeyStatus"></div>
+                            <div class="key-status" id="nvidiaKeyStatus"><span id="pLabel-nvidia" class="key-status-label"></span></div>
+                        </div>
+
+                        <!-- Ollama (Local, no key needed) -->
+                        <div class="key-provider-card ollama-card">
+                            <div class="kpc-header">
+                                <div>
+                                    <span class="kpc-badge ollama-badge">🏠 Ollama</span>
+                                    <span class="kpc-sub">Run AI models locally — no API key needed</span>
+                                </div>
+                                <span class="p-status-dot" id="pDot-ollama"></span>
+                                <a href="https://ollama.com" target="_blank" class="kpc-getkey">Install Ollama →</a>
+                            </div>
+                            <div class="kpc-hint">Start Ollama, then click Connect. Pull models with <code>ollama pull llama3.2</code></div>
+                            <div class="key-input-row">
+                                <input type="text" id="ollamaBaseUrlInput" placeholder="http://localhost:11434/v1" class="key-input" value="http://localhost:11434/v1" autocomplete="off" />
+                                <button class="validate-btn" onclick="saveOllamaConfig()"><i class="fa-solid fa-plug"></i> Connect</button>
+                            </div>
+                            <div class="key-status" id="ollamaKeyStatus"><span id="pLabel-ollama" class="key-status-label"></span></div>
                         </div>
 
                         <!-- OpenAI -->
@@ -1401,53 +1418,70 @@
                             <div class="kpc-header">
                                 <div>
                                     <span class="kpc-badge openai-badge">🤖 OpenAI</span>
-                                    <span class="kpc-sub">GPT-4o, o3, o4-mini</span>
+                                    <span class="kpc-sub">GPT-4o, o3-mini · platform.openai.com</span>
                                 </div>
+                                <span class="p-status-dot" id="pDot-openai"></span>
                                 <a href="https://platform.openai.com" target="_blank" class="kpc-getkey">Get key →</a>
                             </div>
                             <div class="key-input-row">
-                                <input type="password" id="openaiKeyInput" placeholder="sk-…" class="key-input"
-                                    autocomplete="off" />
-                                <button class="validate-btn" onclick="saveKey('openai')"><i
-                                        class="fa-solid fa-check"></i> Save &amp; Test</button>
+                                <input type="password" id="openaiKeyInput" placeholder="sk-…" class="key-input" autocomplete="off" />
+                                <button class="validate-btn" onclick="saveKey('openai')"><i class="fa-solid fa-check"></i> Save &amp; Test</button>
                             </div>
-                            <div class="key-status" id="openaiKeyStatus"></div>
+                            <div class="key-status" id="openaiKeyStatus"><span id="pLabel-openai" class="key-status-label"></span></div>
                         </div>
 
-                        <!-- Anthropic -->
+                        <!-- OpenRouter (Claude, Gemini, and more) -->
                         <div class="key-provider-card">
                             <div class="kpc-header">
                                 <div>
-                                    <span class="kpc-badge anthropic-badge">✦ Anthropic</span>
-                                    <span class="kpc-sub">Claude Opus 4, Sonnet 4, Haiku 4</span>
+                                    <span class="kpc-badge openrouter-badge">🔀 OpenRouter</span>
+                                    <span class="kpc-sub">Claude, Gemini, DeepSeek, Mistral &amp; more</span>
                                 </div>
-                                <a href="https://console.anthropic.com" target="_blank" class="kpc-getkey">Get key →</a>
+                                <span class="p-status-dot" id="pDot-openrouter"></span>
+                                <a href="https://openrouter.ai/keys" target="_blank" class="kpc-getkey">Get key →</a>
                             </div>
                             <div class="key-input-row">
-                                <input type="password" id="anthropicKeyInput" placeholder="sk-ant-…" class="key-input"
-                                    autocomplete="off" />
-                                <button class="validate-btn" onclick="saveKey('anthropic')"><i
-                                        class="fa-solid fa-check"></i> Save &amp; Test</button>
+                                <input type="password" id="openrouterKeyInput" placeholder="sk-or-…" class="key-input" autocomplete="off" />
+                                <button class="validate-btn" onclick="saveKey('openrouter')"><i class="fa-solid fa-check"></i> Save &amp; Test</button>
                             </div>
-                            <div class="key-status" id="anthropicKeyStatus"></div>
+                            <div class="key-status" id="openrouterKeyStatus"><span id="pLabel-openrouter" class="key-status-label"></span></div>
                         </div>
 
-                        <!-- Google -->
+                        <!-- Groq (Fast inference) -->
                         <div class="key-provider-card">
                             <div class="kpc-header">
                                 <div>
-                                    <span class="kpc-badge google-badge">✦ Google</span>
-                                    <span class="kpc-sub">Gemini 2.5 Pro / Flash</span>
+                                    <span class="kpc-badge groq-badge">⚡ Groq</span>
+                                    <span class="kpc-sub">Llama &amp; DeepSeek on ultra-fast LPU hardware</span>
                                 </div>
-                                <a href="https://aistudio.google.com" target="_blank" class="kpc-getkey">Get key →</a>
+                                <span class="p-status-dot" id="pDot-groq"></span>
+                                <a href="https://console.groq.com" target="_blank" class="kpc-getkey">Get free key →</a>
                             </div>
                             <div class="key-input-row">
-                                <input type="password" id="googleKeyInput" placeholder="AIza…" class="key-input"
-                                    autocomplete="off" />
-                                <button class="validate-btn" onclick="saveKey('google')"><i
-                                        class="fa-solid fa-check"></i> Save &amp; Test</button>
+                                <input type="password" id="groqKeyInput" placeholder="gsk_…" class="key-input" autocomplete="off" />
+                                <button class="validate-btn" onclick="saveKey('groq')"><i class="fa-solid fa-check"></i> Save &amp; Test</button>
                             </div>
-                            <div class="key-status" id="googleKeyStatus"></div>
+                            <div class="key-status" id="groqKeyStatus"><span id="pLabel-groq" class="key-status-label"></span></div>
+                        </div>
+
+                        <!-- Custom OpenAI-compatible API -->
+                        <div class="key-provider-card">
+                            <div class="kpc-header">
+                                <div>
+                                    <span class="kpc-badge custom-badge">🔧 Custom API</span>
+                                    <span class="kpc-sub">Any OpenAI-compatible endpoint (LM Studio, vLLM, etc.)</span>
+                                </div>
+                                <span class="p-status-dot" id="pDot-custom"></span>
+                            </div>
+                            <div class="kpc-hint">Enter the base URL of your OpenAI-compatible server. Leave key blank if no auth is required.</div>
+                            <div class="key-input-row">
+                                <input type="text" id="customBaseUrlInput" placeholder="http://localhost:1234/v1" class="key-input" autocomplete="off" />
+                            </div>
+                            <div class="key-input-row" style="margin-top:6px">
+                                <input type="password" id="customKeyInput" placeholder="API key (optional)" class="key-input" autocomplete="off" />
+                                <button class="validate-btn" onclick="saveCustomProvider()"><i class="fa-solid fa-check"></i> Save</button>
+                            </div>
+                            <div class="key-status" id="customKeyStatus"><span id="pLabel-custom" class="key-status-label"></span></div>
                         </div>
                     </div>
 
@@ -1660,11 +1694,13 @@
                     <input type="text" id="modelFilterInput" placeholder="Filter models…"
                         oninput="filterModels(this.value)" />
                     <div class="model-filter-chips">
-                        <button class="mfc active" onclick="filterModelsByProvider('all')">All</button>
-                        <button class="mfc" onclick="filterModelsByProvider('nvidia')">🚀 NVIDIA</button>
-                        <button class="mfc" onclick="filterModelsByProvider('openai')">🤖 OpenAI</button>
-                        <button class="mfc" onclick="filterModelsByProvider('anthropic')">✦ Anthropic</button>
-                        <button class="mfc" onclick="filterModelsByProvider('google')">✦ Google</button>
+                        <button class="mfc active" onclick="filterModelsByProvider('all', this)">All</button>
+                        <button class="mfc" onclick="filterModelsByProvider('nvidia', this)">🚀 NVIDIA</button>
+                        <button class="mfc" onclick="filterModelsByProvider('ollama', this)">🏠 Ollama</button>
+                        <button class="mfc" onclick="filterModelsByProvider('openai', this)">🤖 OpenAI</button>
+                        <button class="mfc" onclick="filterModelsByProvider('openrouter', this)">🔀 OpenRouter</button>
+                        <button class="mfc" onclick="filterModelsByProvider('groq', this)">⚡ Groq</button>
+                        <button class="mfc" onclick="filterModelsByProvider('custom', this)">🔧 Custom</button>
                     </div>
                 </div>
                 <div class="model-cards-grid" id="modelCardsGrid">

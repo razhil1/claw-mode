@@ -60,11 +60,16 @@ from src.toolbox import (
 )
 from src.llm import (
     DEFAULT_MODEL,
+    ALL_MODELS,
     get_all_models,
     get_nvidia_key,
     set_runtime_key,
     validate_key,
-    LLMClient,  # Added for proxy bridge
+    validate_ollama,
+    set_provider_config,
+    get_all_provider_status,
+    get_ollama_models,
+    LLMClient,
 )
 
 
@@ -784,11 +789,22 @@ def set_atlas() -> Response:
 
 @app.route("/api/models")
 def get_models() -> Response:
-    all_models = get_all_models()
+    all_models = dict(get_all_models())
+
+    # Merge live Ollama models (non-blocking; skip on timeout)
+    try:
+        live_ollama = get_ollama_models()
+        for m in live_ollama:
+            mid = m["id"]
+            if mid not in all_models:
+                all_models[mid] = m
+    except Exception:
+        pass
+
     result = [
         {
             "id":          mid,
-            "label":       info["label"],
+            "label":       info.get("label", mid),
             "short":       info.get("short", ""),
             "description": info.get("description", ""),
             "context":     info.get("context", 4096),
@@ -1127,37 +1143,58 @@ def upgrade_system() -> Response:
 
 @app.route("/api/settings/key-status")
 def key_status() -> Response:
+    """Return per-provider configuration status (backward-compat + extended)."""
+    status = get_all_provider_status()
+    # legacy field for older frontend code
     key = get_nvidia_key()
-    return _ok(nvidia={
-        "configured": bool(key),
-        "prefix":     key[:14] + "…" if key else "",
-    })
+    return _ok(
+        nvidia={"configured": bool(key), "prefix": key[:14] + "…" if key else ""},
+        providers=status,
+    )
 
 
 @app.route("/api/settings/validate-key", methods=["POST"])
 def api_validate_key() -> Response:
-    data = request.json or {}
-    key  = data.get("key", "").strip()
+    data     = request.json or {}
+    key      = data.get("key", "").strip()
+    provider = data.get("provider", "nvidia").strip()
     if not key:
         return _error("'key' is required", code="NO_KEY")
-    return jsonify(validate_key(key))
+    return jsonify(validate_key(key, provider=provider))
 
 
 @app.route("/api/settings/set-key", methods=["POST"])
 def api_set_key() -> Response:
-    data = request.json or {}
-    key  = data.get("key", "").strip()
+    data     = request.json or {}
+    key      = data.get("key", "").strip()
+    provider = data.get("provider", "nvidia").strip()
     if not key:
         return _error("'key' is required", code="NO_KEY")
-    set_runtime_key(key)
-    os.environ["NVIDIA_API_KEY"] = key
-    return _ok(
-        message=(
-            "NVIDIA key saved and will persist across restarts. "
-            "You can also set NVIDIA_API_KEY as a Replit Secret (Tools → Secrets) "
-            "to override it at the environment level."
-        )
-    )
+    set_provider_config(provider, key=key)
+    if provider == "nvidia":
+        os.environ["NVIDIA_API_KEY"] = key
+    return _ok(message=f"{provider.upper()} key saved and will persist across restarts.")
+
+
+@app.route("/api/settings/set-provider", methods=["POST"])
+def api_set_provider() -> Response:
+    """Save a provider's base_url and/or key (for Ollama and custom APIs)."""
+    data     = request.json or {}
+    provider = data.get("provider", "").strip()
+    key      = data.get("key", "").strip()
+    base_url = data.get("base_url", "").strip()
+    if not provider:
+        return _error("'provider' is required", code="NO_PROVIDER")
+    set_provider_config(provider, key=key, base_url=base_url)
+    return _ok(message=f"{provider} provider config saved.")
+
+
+@app.route("/api/ollama/models")
+def api_ollama_models() -> Response:
+    """Discover models installed in the local Ollama instance."""
+    base_url = request.args.get("base_url", "").strip()
+    result   = validate_ollama(base_url)
+    return jsonify(result)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
