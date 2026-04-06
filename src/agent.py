@@ -827,6 +827,8 @@ _TOOL_RE = re.compile(
 )
 
 
+_FILE_EXT_RE = re.compile(r"[a-zA-Z0-9_\-\./\\]+\.\w{1,10}")
+
 def _parse_all_tool_calls(text: str) -> list[tuple[str, str]]:
     """Extract ALL tool calls from an LLM response (multi-tool support)."""
     calls = [
@@ -835,19 +837,33 @@ def _parse_all_tool_calls(text: str) -> list[tuple[str, str]]:
         if m.group(1).strip() in _KNOWN_TOOLS
     ]
     
-    # Fallback: If no explicit tools are found, look for Markdown code blocks with filenames.
     if not calls:
-        blocks = re.finditer(r"```[a-zA-Z0-9_-]*\n([\s\S]*?)```", text)
+        blocks = list(re.finditer(r"```[a-zA-Z0-9_-]*\n([\s\S]*?)```", text))
         for b in blocks:
             code = b.group(1)
-            # Try to pull a filename from the first line (e.g. // path/to/file.js or # main.py)
             first_line = code.split("\n", 1)[0].strip()
-            name_match = re.match(r"^(?://|#|/\*|<!--)\s*([a-zA-Z0-9_\-\./\\]+\.[a-zA-Z0-9]+)", first_line)
+            name_match = re.match(
+                r"^(?://|#|/\*|<!--)\s*([a-zA-Z0-9_\-\./\\]+\.\w{1,10})",
+                first_line,
+            )
             if name_match:
                 filename = name_match.group(1)
-                # Remove the first line from the code
                 pure_code = code[len(first_line):].strip()
                 calls.append(("FileEditTool", f"{filename} ::: {pure_code}"))
+                continue
+
+            preceding = text[:b.start()]
+            last_line = preceding.rstrip().rsplit("\n", 1)[-1].strip()
+            ctx_match = re.search(
+                r"(?:`([a-zA-Z0-9_\-\./\\]+\.\w{1,10})`|"
+                r"(?:create|write|save|update|file)\s+(?:a\s+)?(?:new\s+)?(?:file\s+)?"
+                r"(?:called\s+|named\s+|at\s+)?"
+                r"[`'\"]?([a-zA-Z0-9_\-\./\\]+\.\w{1,10})[`'\"]?)",
+                last_line, re.IGNORECASE,
+            )
+            if ctx_match:
+                filename = ctx_match.group(1) or ctx_match.group(2)
+                calls.append(("FileEditTool", f"{filename} ::: {code.strip()}"))
 
     return calls
 
@@ -863,6 +879,46 @@ def _strip_tool_lines(text: str) -> str:
 
 def _detect_done(text: str) -> bool:
     return bool(re.search(r"\bDONE\s*:", text, re.IGNORECASE))
+
+
+def _validate_done_claims(done_text: str, tracker) -> list[str]:
+    """
+    Extract filenames mentioned in DONE text and check if they exist.
+    Returns a list of files that were claimed but don't actually exist.
+    """
+    from .toolbox import get_workspace_root
+    root = get_workspace_root()
+
+    done_section = re.search(r"DONE\s*:[\s\S]*", done_text, re.IGNORECASE)
+    if not done_section:
+        return []
+    section = done_section.group(0)
+
+    mentioned = set()
+    for m in re.finditer(
+        r"(?:^|[\s,`'\"])([a-zA-Z0-9_\-\./]+\.\w{1,10})(?:[\s,`'\"]|$)",
+        section,
+    ):
+        fname = m.group(1).strip(".,`'\"")
+        if fname and not fname.startswith(".") and ("/" in fname or "." in fname):
+            if not any(x in fname for x in ["http", "localhost", "0.0.0", "127."]):
+                mentioned.add(fname)
+
+    if not mentioned:
+        return []
+
+    actually_written = set()
+    if tracker and hasattr(tracker, 'files'):
+        actually_written = set(tracker.files)
+
+    missing = []
+    for f in mentioned:
+        full = root / f
+        if not full.exists() and f not in actually_written:
+            if re.match(r"^[\w\-/]+\.\w{1,10}$", f):
+                missing.append(f)
+
+    return missing[:8]
 
 
 def _extract_plan(text: str) -> str | None:
@@ -1119,6 +1175,7 @@ class ClawAgent:
         See class docstring for the full event schema reference.
         """
         self.clear_stop()
+        self._no_tool_nudges = 0
 
         # Validate mode_override against canonical allowed keys
         mode       = mode_override if mode_override in VALID_MODES else detect_mode(user_prompt)
@@ -1289,12 +1346,41 @@ class ClawAgent:
 
             # ── completion check ──────────────────────────────────────────────
             if _detect_done(response_text) and not _parse_first_tool_call(response_text):
+                missing = _validate_done_claims(response_text, tracker)
+                if missing and turn < max_turns - 2:
+                    rejection = (
+                        f"[System] DONE rejected. You claimed to create/modify these files "
+                        f"but they do NOT exist in the workspace: {', '.join(missing)}\n"
+                        "Files are only created when you use TOOL: FileEditTool | <path> ::: <content>.\n"
+                        "Please create the missing files now using actual tool calls."
+                    )
+                    messages.append({"role": "assistant", "content": response_text.strip()})
+                    messages.append({"role": "user", "content": rejection})
+                    yield {"type": "nudge", "text": f"Agent claimed files exist but {len(missing)} are missing. Requesting actual creation..."}
+                    full_content.append(response_text)
+                    continue
                 full_content.append(response_text)
                 break
 
             # ── parse tool calls ──────────────────────────────────────────────
             tool_calls = _parse_all_tool_calls(response_text)
             if not tool_calls:
+                no_tool_nudges = getattr(self, '_no_tool_nudges', 0)
+                if no_tool_nudges < 2 and turn < max_turns - 2:
+                    self._no_tool_nudges = no_tool_nudges + 1
+                    nudge = (
+                        "[System] You wrote a plan or code but did NOT call any tools. "
+                        "Files are NOT created until you use the tools.\n"
+                        "To create a file, use:  TOOL: FileEditTool | <path> ::: <content>\n"
+                        "To run a command, use:  TOOL: BashTool | <command>\n"
+                        "To list files, use:     TOOL: ListDirTool | .\n"
+                        "Please proceed by making actual tool calls now."
+                    )
+                    messages.append({"role": "assistant", "content": response_text.strip() or "(empty)"})
+                    messages.append({"role": "user", "content": nudge})
+                    yield {"type": "nudge", "text": "Reminding agent to use tools instead of just planning..."}
+                    full_content.append(response_text)
+                    continue
                 full_content.append(response_text)
                 break
 

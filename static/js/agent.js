@@ -499,6 +499,13 @@ function handleStreamEvent(evt, contentDiv) {
         contentDiv.appendChild(warnBadge);
     }
 
+    if (evt.type === 'nudge') {
+        const nudgeBadge = document.createElement('div');
+        nudgeBadge.className = 'agent-tool-badge info';
+        nudgeBadge.innerHTML = `<i class="fa-solid fa-rotate"></i> ${escapeHtml(evt.text || 'Redirecting agent...')}`;
+        contentDiv.appendChild(nudgeBadge);
+    }
+
     if (evt.type === 'compressed') {
         appendSystemMessage('🗜️ ' + (evt.text || 'Context compressed'));
     }

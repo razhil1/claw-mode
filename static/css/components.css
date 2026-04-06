@@ -1046,6 +1046,14 @@
     color: var(--amber);
 }
 
+.agent-tool-badge.info {
+    border-left-color: var(--cyan, #00d4ff);
+}
+
+.agent-tool-badge.info i {
+    color: var(--cyan, #00d4ff);
+}
+
 /* Tool result — collapsible output from a tool execution */
 .agent-tool-result {
     margin: 4px 0;
