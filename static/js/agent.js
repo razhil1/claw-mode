@@ -32,6 +32,20 @@ async function sendPrompt() {
     NX.chatHistory.push({ role: 'user', content: text, time: Date.now() });
     setAgentWorking(true);
 
+    const runStartTime = Date.now();
+    const sbToolsEl = document.getElementById('sbToolsElapsed');
+    const sbToolCountEl = document.getElementById('sbToolCount');
+    const sbElapsedEl = document.getElementById('sbElapsed');
+    if (sbToolsEl) sbToolsEl.style.display = 'inline-flex';
+    if (sbToolCountEl) sbToolCountEl.textContent = '0';
+    if (sbElapsedEl) sbElapsedEl.textContent = '0s';
+    const elapsedTimer = setInterval(() => {
+        if (sbElapsedEl) {
+            const sec = Math.round((Date.now() - runStartTime) / 1000);
+            sbElapsedEl.textContent = sec < 60 ? sec + 's' : Math.floor(sec/60) + 'm ' + (sec%60) + 's';
+        }
+    }, 1000);
+
     try {
         const body = {
             prompt: text,
@@ -82,6 +96,7 @@ async function sendPrompt() {
                     if (evt.type === 'tool_call') {
                         toolsUsed++;
                         NX.toolCallCount++;
+                        if (sbToolCountEl) sbToolCountEl.textContent = toolsUsed;
                         logToolCall(evt);
                     }
                     if (evt.type === 'tool_result') {
@@ -90,11 +105,13 @@ async function sendPrompt() {
                             tool: evt.tool || 'unknown',
                             summary: `${evt.tool} (${evt.elapsed}s)`,
                             result: evt.result || '',
+                            success: evt.success,
+                            elapsed: evt.elapsed,
                         });
 
                         // ─── AUTO-REFRESH FILE TREE after file operations ───
                         const isFileOp = ['FileEditTool', 'FilePatchTool', 'FileDeleteTool'].includes(evt.tool);
-                        const isBash = evt.tool === 'BashTool';
+                        const isBash = evt.tool === 'BashTool' || evt.tool === 'BashExec';
                         const now = Date.now();
 
                         if (isFileOp || isBash) {
@@ -163,6 +180,7 @@ async function sendPrompt() {
         appendSystemMessage('⚠️ Connection lost. Check that the server is running.');
     }
 
+    clearInterval(elapsedTimer);
     setAgentWorking(false);
 }
 

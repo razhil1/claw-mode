@@ -36,7 +36,9 @@ def get_workspace_root():
 def enforce_safe_path(path: str) -> Path:
     root = get_workspace_root()
     full_path = (root / path).resolve()
-    if not full_path.is_relative_to(root):
+    root_str = str(root).casefold()
+    full_str = str(full_path).casefold()
+    if not full_str.startswith(root_str + os.sep) and full_str != root_str:
         raise ValueError(f"Security error: Access denied to path outside of workspace ({path})")
     return full_path
 

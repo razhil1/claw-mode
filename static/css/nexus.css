@@ -7362,6 +7362,20 @@ kbd {
     animation: uphPulse 2s ease-in-out infinite;
 }
 
+.sb-tools-elapsed {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: var(--r-sm);
+    background: rgba(167, 139, 250, 0.1);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    font-size: 10px;
+    font-weight: 600;
+    color: #a78bfa;
+}
+.sb-tools-elapsed .sb-sep { opacity: 0.4; margin: 0 2px; }
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    ENHANCED SWARM AGENT CARDS
    ═══════════════════════════════════════════════════════════════════════════════ */
