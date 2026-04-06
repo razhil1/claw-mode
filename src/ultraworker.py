@@ -694,13 +694,22 @@ def _ws_bash(cmd: str, cwd: Path, timeout: int = 120) -> str:
 
 def _is_error(output: str) -> bool:
     low = output.lower()
-    return (
-        low.startswith("error")
-        or low.startswith("tool error")
-        or "permission denied" in low
-        or "no such file" in low
-        or "command not found" in low
+    if low.startswith(("error", "tool error", "security error")):
+        return True
+    _exit_m = re.match(r"\[exit code (\d+)\]", low)
+    if _exit_m and int(_exit_m.group(1)) != 0:
+        return True
+    _ERROR_SIGNALS = (
+        "permission denied", "no such file", "command not found",
+        "traceback (most recent", "syntaxerror:", "nameerror:",
+        "typeerror:", "importerror:", "modulenotfounderror:",
+        "filenotfounderror:", "valueerror:", "keyerror:",
+        "indentationerror:", "attributeerror:",
+        "fatal error", "segmentation fault",
+        "cannot find module", "enoent:", "eacces:",
+        "search block not found",
     )
+    return any(sig in low for sig in _ERROR_SIGNALS)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

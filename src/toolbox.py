@@ -666,6 +666,7 @@ def tool_file_patch(path: str, search_block: str, replace_block: str) -> str:
                     return "Error: Search block is empty."
 
                 def fuzzy_match_lines():
+                    import difflib
                     c_norm = [l.strip() for l in content_lines]
                     s_norm = [l.strip() for l in search_lines]
 
@@ -680,6 +681,22 @@ def tool_file_patch(path: str, search_block: str, replace_block: str) -> str:
                                 for j in range(i + len(s_norm) - 1, min(i + len(s_norm) + 5, len(c_norm))):
                                     if c_norm[j] == last:
                                         return i, j + 1
+
+                    best_ratio, best_range = 0.0, None
+                    s_text = "\n".join(s_norm)
+                    window = len(s_norm)
+                    for delta in range(3):
+                        for w in (window + delta, window - delta):
+                            if w < 1 or w > len(c_norm):
+                                continue
+                            for i in range(len(c_norm) - w + 1):
+                                c_text = "\n".join(c_norm[i:i+w])
+                                ratio = difflib.SequenceMatcher(None, s_text, c_text).ratio()
+                                if ratio > best_ratio:
+                                    best_ratio = ratio
+                                    best_range = (i, i + w)
+                    if best_ratio >= 0.7 and best_range:
+                        return best_range
                     return None
 
                 match = fuzzy_match_lines()
