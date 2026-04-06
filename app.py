@@ -1112,16 +1112,39 @@ def multi_agent_roles() -> Response:
 def system_status() -> Response:
     import psutil
     from src.toolbox import get_workspace_root
+    from src.tools import PORTED_TOOLS
     ws = get_workspace_root()
     file_count = sum(1 for _ in ws.rglob("*") if _.is_file())
     disk = psutil.disk_usage(str(ws))
     mem = psutil.virtual_memory()
-    engines = {
-        "claw_agent": "idle",
-        "ultraworker": "active" if ULTRA_MODE else "standby",
-        "swarm": "idle",
-    }
+
     active_sessions = len(_registry._agents) if hasattr(_registry, "_agents") else 0
+    has_running_agent = False
+    has_running_swarm = False
+    if hasattr(_registry, "_agents"):
+        for ag in _registry._agents.values():
+            if hasattr(ag, "_running") and ag._running:
+                has_running_agent = True
+            if hasattr(ag, "_swarm_running") and ag._swarm_running:
+                has_running_swarm = True
+
+    engines = {
+        "claw_agent": "active" if (has_running_agent and not ULTRA_MODE) else "idle",
+        "ultraworker": "active" if (has_running_agent and ULTRA_MODE) else ("standby" if ULTRA_MODE else "idle"),
+        "swarm": "active" if has_running_swarm else "idle",
+    }
+
+    provider = ACTIVE_MODEL.split(":")[0] if ":" in ACTIVE_MODEL else "unknown"
+    tool_count = len(PORTED_TOOLS)
+
+    memory_path = ws / ".memory.md"
+    memory_lines = 0
+    if memory_path.exists():
+        try:
+            memory_lines = len(memory_path.read_text(encoding="utf-8", errors="ignore").splitlines())
+        except Exception:
+            pass
+
     return _ok(
         workspace={"path": str(ws), "files": file_count},
         cpu_percent=psutil.cpu_percent(interval=0.1),
@@ -1131,6 +1154,9 @@ def system_status() -> Response:
         active_sessions=active_sessions,
         ultra_mode=ULTRA_MODE,
         active_model=ACTIVE_MODEL,
+        active_provider=provider,
+        tool_registry={"total": tool_count, "active": tool_count},
+        context={"memory_lines": memory_lines, "memory_file": ".memory.md"},
     )
 
 

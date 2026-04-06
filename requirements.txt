@@ -19,6 +19,9 @@ requests>=2.31.0
 # Install psycopg2-binary (not psycopg2) — it ships pre-compiled, no pg_config needed
 psycopg2-binary>=2.9.0
 
+# System monitoring (used by /api/system/status for CPU / RAM / disk metrics)
+psutil>=5.9.0
+
 # ── Optional / local providers ───────────────────────────────────────────────
 # Ollama:     No extra package needed — uses openai client + requests
 # LM Studio:  No extra package needed — uses openai client

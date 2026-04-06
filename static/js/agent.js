@@ -1381,6 +1381,9 @@ async function refreshSystemStatus() {
         setVal('sysWsFiles', data.workspace?.files || 0);
         setVal('sysSessions', data.active_sessions || 0);
         setVal('sysModel', data.active_model || '—');
+        setVal('sysProvider', data.active_provider || '—');
+        setVal('sysToolCount', data.tool_registry?.total || 0);
+        setVal('sysMemoryLines', data.context?.memory_lines || 0);
 
         const engines = data.engines || {};
         _updateEngineDot('sysEngClaw', 'sysEngClawState', engines.claw_agent);
