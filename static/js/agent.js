@@ -98,16 +98,13 @@ async function sendPrompt() {
                         const now = Date.now();
 
                         if (isFileOp || isBash) {
-                            // Throttle file refreshes to once per 800ms
                             if (now - lastFileRefresh > 800) {
                                 lastFileRefresh = now;
                                 loadFiles().then(() => {
-                                    // Auto-open the file in editor if it was created/edited
                                     if (isFileOp && evt.success && evt.result) {
                                         const match = evt.result.match(/['"]([^'"]+)['"]/);
                                         if (match) {
                                             const filePath = match[1];
-                                            // Only auto-open if it's a success write
                                             if (evt.result.includes('Success') && !evt.result.includes('deleted')) {
                                                 openFileInEditor(filePath);
                                             }
@@ -116,9 +113,8 @@ async function sendPrompt() {
                                 });
                             }
 
-                            // Show bash output in terminal panel too
                             if (isBash && evt.result) {
-                                appendTerminalOutput(evt.result);
+                                appendTerminalOutput(evt.result, evt.command || '');
                             }
                         }
 
@@ -171,30 +167,55 @@ async function sendPrompt() {
 }
 
 // ─── Terminal Output Helper ──────────────────────────────────────────────────
-function appendTerminalOutput(output) {
-    // Write to xterm if available
+function appendTerminalOutput(output, command) {
+    if (!output && !command) return;
+
     if (typeof _xterm !== 'undefined' && _xterm) {
-        const lines = output.split('\n');
-        lines.forEach(line => _xterm.writeln(line));
+        if (command) {
+            _xterm.writeln('\x1b[90m$ ' + command + '\x1b[0m');
+        }
+        const lines = (output || '').split('\n');
+        lines.forEach(line => {
+            if (line.match(/error|Error|ERROR|fail|FAIL/i)) {
+                _xterm.writeln('\x1b[31m' + line + '\x1b[0m');
+            } else if (line.match(/warn|WARN|Warning/i)) {
+                _xterm.writeln('\x1b[33m' + line + '\x1b[0m');
+            } else if (line.match(/success|Success|✓|done|Done|DONE/i)) {
+                _xterm.writeln('\x1b[32m' + line + '\x1b[0m');
+            } else {
+                _xterm.writeln(line);
+            }
+        });
+        _xterm.writeln('');
         _xterm.write('\x1b[36m❯\x1b[0m ');
     }
 
-    // Also write to simple terminal
     const stermOutput = document.getElementById('stermOutput');
     if (stermOutput) {
         const resultDiv = document.createElement('div');
         resultDiv.className = 'sterm-result agent-output';
-        resultDiv.innerHTML = `<span class="sterm-agent-tag">🤖 Agent</span><pre>${escapeHtml(output)}</pre>`;
+        let html = '';
+        if (command) {
+            html += `<div class="sterm-cmd"><span class="sterm-prompt">$</span> <span class="sterm-cmd-text agent-cmd">${escapeHtml(command)}</span></div>`;
+        }
+        html += `<pre>${_colorizeTermOutput(output || '')}</pre>`;
+        resultDiv.innerHTML = html;
         stermOutput.appendChild(resultDiv);
         stermOutput.scrollTop = stermOutput.scrollHeight;
     }
 
-    // Update terminal badge
     const badge = document.getElementById('rptab-terminal-badge');
     if (badge) {
         badge.style.display = '';
         badge.textContent = '●';
     }
+}
+
+function _colorizeTermOutput(text) {
+    return escapeHtml(text)
+        .replace(/(error[^\n]*|Error[^\n]*|ERROR[^\n]*|Traceback[^\n]*)/gi, '<span class="term-error">$1</span>')
+        .replace(/(warning[^\n]*|Warning[^\n]*|WARN[^\n]*)/gi, '<span class="term-warn">$1</span>')
+        .replace(/(success[^\n]*|✓[^\n]*|done[^\n]*)/gi, '<span class="term-success">$1</span>');
 }
 
 function _renderToolLogChecklist(steps) {
@@ -232,29 +253,13 @@ function _renderToolLogChecklist(steps) {
 function handleStreamEvent(evt, contentDiv) {
     if (evt.type === 'token' && evt.text) {
         contentDiv.dataset.md = (contentDiv.dataset.md || '') + evt.text;
-        if (typeof marked !== 'undefined') {
-            contentDiv.innerHTML = marked.parse(contentDiv.dataset.md);
-            // Highlight code blocks
-            contentDiv.querySelectorAll('pre code').forEach(block => {
-                if (typeof hljs !== 'undefined') hljs.highlightElement(block);
-            });
-        } else {
-            contentDiv.textContent = contentDiv.dataset.md;
-        }
+        _renderMarkdown(contentDiv, contentDiv.dataset.md);
         scrollChat();
     }
 
     if (evt.type === 'live_text' && evt.text) {
-        // Show live streamed text (prose without tool calls)
         contentDiv.dataset.md = evt.text;
-        if (typeof marked !== 'undefined') {
-            contentDiv.innerHTML = marked.parse(evt.text);
-            contentDiv.querySelectorAll('pre code').forEach(block => {
-                if (typeof hljs !== 'undefined') hljs.highlightElement(block);
-            });
-        } else {
-            contentDiv.textContent = evt.text;
-        }
+        _renderMarkdown(contentDiv, evt.text);
         scrollChat();
     }
 
@@ -555,6 +560,65 @@ function appendSystemMessage(text) {
 function scrollChat() {
     const container = document.getElementById('chatMessages');
     if (container) container.scrollTop = container.scrollHeight;
+}
+
+function _renderMarkdown(container, mdText) {
+    if (typeof marked !== 'undefined') {
+        if (!marked._nxConfigured) {
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                headerIds: false,
+                mangle: false,
+            });
+            const defaultRenderer = new marked.Renderer();
+            defaultRenderer.code = function(codeOrObj, langArg) {
+                let codeText, lang;
+                if (typeof codeOrObj === 'object' && codeOrObj !== null) {
+                    codeText = codeOrObj.text || '';
+                    lang = codeOrObj.lang || '';
+                } else {
+                    codeText = String(codeOrObj || '');
+                    lang = langArg || '';
+                }
+                const langLabel = lang ? lang.split(/\s/)[0] : '';
+                const highlighted = (typeof hljs !== 'undefined' && langLabel && hljs.getLanguage(langLabel))
+                    ? hljs.highlight(codeText, { language: langLabel }).value
+                    : escapeHtml(codeText);
+                return `<div class="code-block-wrap">
+                    <div class="cb-header">
+                        <span class="cb-lang">${langLabel || 'code'}</span>
+                        <button class="cb-copy" onclick="copyCodeBlock(this)"><i class="fa-solid fa-copy"></i> Copy</button>
+                    </div>
+                    <pre><code class="${langLabel ? 'language-' + langLabel : ''}">${highlighted}</code></pre>
+                </div>`;
+            };
+            marked.use({ renderer: defaultRenderer });
+            marked._nxConfigured = true;
+        }
+        container.innerHTML = marked.parse(mdText);
+        container.querySelectorAll('pre code').forEach(block => {
+            if (!block.closest('.code-block-wrap') && typeof hljs !== 'undefined') {
+                hljs.highlightElement(block);
+            }
+        });
+    } else {
+        container.textContent = mdText;
+    }
+}
+
+function copyCodeBlock(btn) {
+    const pre = btn.closest('.code-block-wrap')?.querySelector('pre code');
+    if (pre) {
+        navigator.clipboard.writeText(pre.textContent).then(() => {
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
+            btn.classList.add('copied');
+            setTimeout(() => {
+                btn.innerHTML = '<i class="fa-solid fa-copy"></i> Copy';
+                btn.classList.remove('copied');
+            }, 2000);
+        });
+    }
 }
 
 function copyMessageContent(btn) {

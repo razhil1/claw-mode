@@ -89,7 +89,11 @@ function initTerminal() {
     // Fallback: show simple terminal
     container.style.display = 'none';
     const simple = document.getElementById('simpleTerminal');
-    if (simple) simple.style.display = '';
+    if (simple) {
+        simple.style.display = 'flex';
+        const input = document.getElementById('stermInput');
+        if (input) input.focus();
+    }
     _xtermInited = true;
 }
 
