@@ -41,6 +41,12 @@ from .toolbox import (
     tool_view_file_lines,
     tool_workspace_zip,
     tool_workspace_unzip,
+    tool_tree,
+    tool_grep,
+    tool_glob,
+    tool_file_move,
+    tool_file_copy,
+    tool_file_info,
 )
 
 
@@ -254,19 +260,46 @@ What you can do next: <1–3 concrete follow-up ideas>
   you chose and why.
 
 ══════════════════════════════════════════
+ WORKSPACE ISOLATION (ABSOLUTE RULE)
+══════════════════════════════════════════
+You are SANDBOXED inside 'agent_workspace/' — this is your ONLY filesystem.
+• NEVER access, read, write, or reference: app.py, main.py, models.py, src/,
+  static/, templates/, requirements.txt, or any IDE system file.
+• ALL paths are relative to agent_workspace/. Use '.' for the root.
+• Attempting to escape the sandbox will trigger a security error.
+• BashTool commands run with cwd=agent_workspace/. Do NOT 'cd ..' or use
+  absolute paths. The agent cannot damage the IDE — this is enforced.
+
+══════════════════════════════════════════
  TOOLS (exact format required)
 ══════════════════════════════════════════
-TOOL: ListDirTool       | <path>
-TOOL: FileReadTool      | <path>
-TOOL: ViewFileLinesTool | <path> ::: <start_line>,<end_line>
-TOOL: SearchTool        | <path> ::: <regex_pattern>
-TOOL: FileEditTool      | <path> ::: <full file content>
-TOOL: FilePatchTool     | <path> ::: <exact old text> === <replacement text>
-TOOL: FileDeleteTool    | <path>
-TOOL: BashTool          | <shell command>
-TOOL: ThinkTool         | <internal reasoning — no side effects>
-TOOL: WorkspaceZipTool  | <backup_name.zip>
-TOOL: WorkspaceUnzipTool| <backup_name.zip>
+── Navigation & Discovery ──
+TOOL: ListDirTool       | <path>                  — list directory with metadata
+TOOL: TreeTool          | <path>                  — recursive tree view (max 4 levels)
+TOOL: TreeTool          | <path> ::: <max_depth>  — tree with custom depth
+TOOL: GlobTool          | <pattern>               — find files matching glob (e.g. **/*.py)
+TOOL: FileInfoTool      | <path>                  — file/dir metadata (size, lines, perms, dates)
+
+── Reading & Searching ──
+TOOL: FileReadTool      | <path>                  — read entire file with line count
+TOOL: ViewFileLinesTool | <path> ::: <start>,<end> — read line range with numbers
+TOOL: SearchTool        | <path> ::: <regex>       — search files, returns file:line: match
+TOOL: GrepTool          | <path> ::: <regex>       — grep with context lines around matches
+
+── Writing & Editing ──
+TOOL: FileEditTool      | <path> ::: <full content> — create or overwrite entire file
+TOOL: FilePatchTool     | <path> ::: <old> === <new> — surgical search/replace
+TOOL: FileDeleteTool    | <path>                  — delete file or directory
+TOOL: FileMoveTool      | <src> ::: <dst>          — move/rename file or directory
+TOOL: FileCopyTool      | <src> ::: <dst>          — copy file or directory
+
+── Execution ──
+TOOL: BashTool          | <shell command>          — run command in workspace sandbox
+TOOL: ThinkTool         | <reasoning>              — internal reasoning, no side effects
+
+── Backup ──
+TOOL: WorkspaceZipTool  | <name.zip>               — backup workspace to ZIP
+TOOL: WorkspaceUnzipTool| <name.zip>               — restore workspace from ZIP
 
 ══════════════════════════════════════════
  EDITING RULES (non-negotiable)
@@ -608,8 +641,11 @@ def _clean_payload(payload: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _KNOWN_TOOLS = {
-    "ListDirTool", "FileReadTool", "ViewFileLinesTool", "SearchTool",
-    "FileEditTool", "FilePatchTool", "FileDeleteTool", "BashTool", "ThinkTool",
+    "ListDirTool", "TreeTool", "FileReadTool", "ViewFileLinesTool",
+    "SearchTool", "GrepTool", "GlobTool",
+    "FileEditTool", "FilePatchTool", "FileDeleteTool",
+    "FileMoveTool", "FileCopyTool", "FileInfoTool",
+    "BashTool", "ThinkTool",
     "WorkspaceZipTool", "WorkspaceUnzipTool",
 }
 
@@ -660,6 +696,43 @@ def _execute_tool(tool_name: str, payload: str) -> str:
 
         if tool_name == "FileDeleteTool":
             return tool_file_delete(payload)
+
+        if tool_name == "TreeTool":
+            parts = payload.split(":::", 1)
+            path = parts[0].strip() if parts[0].strip() else "."
+            depth = 4
+            if len(parts) > 1:
+                try:
+                    depth = int(parts[1].strip())
+                except ValueError:
+                    pass
+            return tool_tree(path, depth)
+
+        if tool_name == "GrepTool":
+            parts = payload.split(":::", 1)
+            if len(parts) == 2:
+                path_and_ctx = parts[0].strip()
+                query = parts[1].strip()
+                return tool_grep(path_and_ctx, query)
+            return tool_grep(".", payload)
+
+        if tool_name == "GlobTool":
+            return tool_glob(payload.strip())
+
+        if tool_name == "FileMoveTool":
+            parts = payload.split(":::", 1)
+            if len(parts) == 2:
+                return tool_file_move(parts[0].strip(), parts[1].strip())
+            return "Error: FileMoveTool requires 'source ::: destination'."
+
+        if tool_name == "FileCopyTool":
+            parts = payload.split(":::", 1)
+            if len(parts) == 2:
+                return tool_file_copy(parts[0].strip(), parts[1].strip())
+            return "Error: FileCopyTool requires 'source ::: destination'."
+
+        if tool_name == "FileInfoTool":
+            return tool_file_info(payload.strip())
 
         if tool_name == "BashTool":
             return tool_bash_run(payload)
@@ -964,19 +1037,19 @@ class ClawAgent:
     def _snapshot_if_write(
         self, tool_name: str, payload: str, registry: RollbackRegistry
     ) -> None:
-        if tool_name in {"FileEditTool", "FilePatchTool", "FileDeleteTool"}:
+        if tool_name in {"FileEditTool", "FilePatchTool", "FileDeleteTool", "FileMoveTool", "FileCopyTool"}:
             path = payload.split(":::", 1)[0].strip()
             if path:
                 registry.snapshot(path)
 
     def _pretrack(self, tool_name: str, payload: str, tracker: ChangeTracker) -> None:
-        if tool_name in {"FileEditTool", "FilePatchTool"}:
+        if tool_name in {"FileEditTool", "FilePatchTool", "FileMoveTool"}:
             path = payload.split(":::", 1)[0].strip()
             if path:
                 tracker.pre(path)
 
     def _posttrack(self, tool_name: str, payload: str, tracker: ChangeTracker) -> None:
-        if tool_name in {"FileEditTool", "FilePatchTool"}:
+        if tool_name in {"FileEditTool", "FilePatchTool", "FileMoveTool"}:
             path = payload.split(":::", 1)[0].strip()
             if path:
                 tracker.post(path)
@@ -987,7 +1060,7 @@ class ClawAgent:
         if turn == 0:
             return "thinking"
         last_tool = _last_tool_used(messages)
-        if last_tool in {"ListDirTool", "FileReadTool", "ViewFileLinesTool", "SearchTool"}:
+        if last_tool in {"ListDirTool", "TreeTool", "FileReadTool", "ViewFileLinesTool", "SearchTool", "GrepTool", "GlobTool", "FileInfoTool"}:
             return "coding"
         if last_tool == "BashTool":
             return "default"
@@ -1195,6 +1268,7 @@ class ClawAgent:
 
             # Read-only mode: block any write/execute tools
             _WRITE_TOOLS = {"FileEditTool", "FilePatchTool", "FileDeleteTool",
+                            "FileMoveTool", "FileCopyTool",
                             "BashTool", "WorkspaceZipTool", "WorkspaceUnzipTool"}
             if _read_only and tool_name in _WRITE_TOOLS:
                 result = (

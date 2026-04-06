@@ -7,7 +7,12 @@ from pathlib import Path
 
 from .models import PortingBacklog, PortingModule
 from .permissions import ToolPermissionContext
-from .toolbox import tool_file_read, tool_file_edit, tool_bash_run, tool_list_dir, tool_search, tool_view_file_lines, tool_file_delete
+from .toolbox import (
+    tool_file_read, tool_file_edit, tool_bash_run, tool_list_dir,
+    tool_search, tool_view_file_lines, tool_file_delete,
+    tool_file_move, tool_file_copy, tool_file_info, tool_tree,
+    tool_grep, tool_glob,
+)
 
 SNAPSHOT_PATH = Path(__file__).resolve().parent / 'reference_data' / 'tools_snapshot.json'
 
@@ -81,23 +86,46 @@ def find_tools(query: str, limit: int = 20) -> list[PortingModule]:
 
 def execute_tool(name: str, payload: str = '') -> ToolExecution:
     source_hint = 'core'
-    # Real implementations for core tools
     if name == 'FileReadTool':
         message = tool_file_read(payload)
     elif name == 'ListDirTool':
         message = tool_list_dir(payload)
+    elif name == 'TreeTool':
+        parts = payload.split(' ||| ', 1)
+        path = parts[0].strip() if parts[0].strip() else "."
+        depth = 4
+        if len(parts) > 1:
+            try:
+                depth = int(parts[1].strip())
+            except ValueError:
+                pass
+        message = tool_tree(path, depth)
     elif name == 'SearchTool':
         try:
             path, query = payload.split(' ||| ', 1)
             message = tool_search(path.strip(), query.strip())
-        except:
+        except Exception:
             message = "Error: SearchTool requires 'path ||| query'"
+    elif name == 'GrepTool':
+        try:
+            parts = payload.split(' ||| ')
+            if len(parts) >= 2:
+                path = parts[0].strip()
+                query = parts[1].strip()
+                ctx = int(parts[2].strip()) if len(parts) > 2 else 2
+                message = tool_grep(path, query, ctx)
+            else:
+                message = "Error: GrepTool requires 'path ||| query' or 'path ||| query ||| context_lines'"
+        except Exception:
+            message = "Error: GrepTool requires 'path ||| query'"
+    elif name == 'GlobTool':
+        message = tool_glob(payload.strip())
     elif name == 'ViewFileLinesTool':
         try:
             path, limits = payload.split(' ||| ', 1)
             start, end = map(int, limits.split(','))
             message = tool_view_file_lines(path.strip(), start, end)
-        except:
+        except Exception:
             message = "Error: ViewFileLinesTool requires 'path ||| start,end'"
     elif name == 'FileEditTool':
         try:
@@ -107,6 +135,20 @@ def execute_tool(name: str, payload: str = '') -> ToolExecution:
             message = "Error: FileEditTool requires payload format 'path ||| content'."
     elif name == 'FileDeleteTool':
         message = tool_file_delete(payload)
+    elif name == 'FileMoveTool':
+        try:
+            source, dest = payload.split(' ||| ', 1)
+            message = tool_file_move(source.strip(), dest.strip())
+        except ValueError:
+            message = "Error: FileMoveTool requires 'source ||| destination'"
+    elif name == 'FileCopyTool':
+        try:
+            source, dest = payload.split(' ||| ', 1)
+            message = tool_file_copy(source.strip(), dest.strip())
+        except ValueError:
+            message = "Error: FileCopyTool requires 'source ||| destination'"
+    elif name == 'FileInfoTool':
+        message = tool_file_info(payload.strip())
     elif name == 'BashTool':
         message = tool_bash_run(payload)
     else:

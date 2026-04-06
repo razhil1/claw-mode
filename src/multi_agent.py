@@ -66,6 +66,12 @@ try:
         tool_list_dir,
         tool_search,
         tool_view_file_lines,
+        tool_tree,
+        tool_grep,
+        tool_glob,
+        tool_file_move,
+        tool_file_copy,
+        tool_file_info,
     )
     from .agent import (
         SYSTEM_PROMPT,
@@ -232,7 +238,7 @@ SPECIALIST_ROLES: dict[str, dict] = {
             "• Write configuration files (package.json, tsconfig, pyproject.toml, etc.)\n"
             "• Focus on overall structure — NOT implementation details\n"
         ),
-        "tools": ["ListDirTool", "FileReadTool", "FileEditTool", "BashTool", "ThinkTool"],
+        "tools": ["ListDirTool", "TreeTool", "FileReadTool", "FileEditTool", "BashTool", "ThinkTool", "GlobTool"],
         "nvidia_model": "balanced",
     },
     "coder": {
@@ -250,7 +256,8 @@ SPECIALIST_ROLES: dict[str, dict] = {
             "• You can write MULTIPLE files per turn — be aggressive and fast\n"
         ),
         "tools": ["FileReadTool", "FileEditTool", "FilePatchTool", "BashTool",
-                  "ListDirTool", "ThinkTool", "ViewFileLinesTool"],
+                  "ListDirTool", "TreeTool", "ThinkTool", "ViewFileLinesTool",
+                  "FileMoveTool", "FileCopyTool", "GrepTool"],
         "nvidia_model": "coder",
     },
     "reviewer": {
@@ -266,8 +273,8 @@ SPECIALIST_ROLES: dict[str, dict] = {
             "• Suggest performance optimisations\n"
             "• Apply fixes directly using FilePatchTool\n"
         ),
-        "tools": ["FileReadTool", "ViewFileLinesTool", "SearchTool", "FilePatchTool",
-                  "ThinkTool", "ListDirTool"],
+        "tools": ["FileReadTool", "ViewFileLinesTool", "SearchTool", "GrepTool",
+                  "FilePatchTool", "ThinkTool", "ListDirTool", "FileInfoTool"],
         "nvidia_model": "coder_heavy",
     },
     "terminal": {
@@ -283,7 +290,7 @@ SPECIALIST_ROLES: dict[str, dict] = {
             "• Run linters and formatters\n"
             "• Manage environment and tooling\n"
         ),
-        "tools": ["BashTool", "FileReadTool", "ListDirTool", "ThinkTool"],
+        "tools": ["BashTool", "FileReadTool", "ListDirTool", "TreeTool", "ThinkTool", "FileInfoTool"],
         "nvidia_model": "balanced",
     },
     "researcher": {
@@ -299,8 +306,8 @@ SPECIALIST_ROLES: dict[str, dict] = {
             "• Provide context summaries for other agents\n"
             "• NEVER modify files — only read and report\n"
         ),
-        "tools": ["FileReadTool", "ViewFileLinesTool", "SearchTool", "ListDirTool",
-                  "ThinkTool"],
+        "tools": ["FileReadTool", "ViewFileLinesTool", "SearchTool", "GrepTool",
+                  "GlobTool", "ListDirTool", "TreeTool", "FileInfoTool", "ThinkTool"],
         "nvidia_model": "thinker",
     },
 }
