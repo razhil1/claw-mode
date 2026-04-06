@@ -1131,6 +1131,13 @@ async function sendSwarmPrompt() {
                 <span class="swarm-title">Multi-Agent Swarm</span>
                 <span class="swarm-status" id="swarmStatus">Initializing...</span>
             </div>
+            <div class="swarm-flow" id="swarmFlow">
+                <span class="sf-node sf-decomposer">📋 Decomposer</span>
+                <span class="sf-arrow">→</span>
+                <span class="sf-node sf-specialists">⚡ Specialists</span>
+                <span class="sf-arrow">→</span>
+                <span class="sf-node sf-aggregator">🔗 Aggregator</span>
+            </div>
             <div class="swarm-agents" id="swarmAgentCards"></div>
             <div class="swarm-output" id="swarmOutput"></div>
         `;
@@ -1195,6 +1202,7 @@ function handleSwarmEvent(evt) {
         case 'orchestrator_phase':
             if (statusEl) statusEl.textContent = evt.text;
             updateStepBar(evt.phase, evt.text);
+            _highlightSwarmFlowNode(evt.phase);
             break;
 
         case 'orchestrator_plan':
@@ -1216,6 +1224,7 @@ function handleSwarmEvent(evt) {
                             <div class="sa-meta">
                                 <span class="sa-meta-item" id="sat-${t.id}"><i class="fa-solid fa-rotate"></i> 0 turns</span>
                                 <span class="sa-meta-item" id="saf-${t.id}"><i class="fa-solid fa-file"></i> 0 files</span>
+                                <span class="sa-meta-item sa-model" id="sam-${t.id}"><i class="fa-solid fa-microchip"></i> ${t.model || NX.activeModel || '—'}</span>
                             </div>
                             <div class="sa-progress"><div class="sa-progress-fill" id="sapf-${t.id}"></div></div>
                         </div>
@@ -1324,6 +1333,23 @@ function _setProgress(agentId, pct) {
     if (fill) fill.style.width = pct + '%';
 }
 
+function _highlightSwarmFlowNode(phase) {
+    const flow = document.getElementById('swarmFlow');
+    if (!flow) return;
+    flow.querySelectorAll('.sf-node').forEach(n => n.classList.remove('sf-active'));
+    const p = (phase || '').toLowerCase();
+    if (p.includes('decompos') || p.includes('plan')) {
+        const el = flow.querySelector('.sf-decomposer');
+        if (el) el.classList.add('sf-active');
+    } else if (p.includes('specialist') || p.includes('execut') || p.includes('agent')) {
+        const el = flow.querySelector('.sf-specialists');
+        if (el) el.classList.add('sf-active');
+    } else if (p.includes('aggregat') || p.includes('merg') || p.includes('final')) {
+        const el = flow.querySelector('.sf-aggregator');
+        if (el) el.classList.add('sf-active');
+    }
+}
+
 function _appendSwarmOutput(agentId, text) {
     const output = document.getElementById('swarmOutput');
     if (!output) return;
@@ -1429,6 +1455,10 @@ function _updateSbEngine(id, state) {
     el.className = 'sb-eng-badge ' + (state || 'idle');
 }
 
+let _logGroupTs = 0;
+let _logGroupEl = null;
+let _logGroupCount = 0;
+
 function logToolCall(evt) {
     NX.toolLog.push(evt);
     const container = document.getElementById('toolLogEntries');
@@ -1436,6 +1466,27 @@ function logToolCall(evt) {
 
     const empty = container.querySelector('.log-empty');
     if (empty) empty.remove();
+
+    const now = Date.now();
+    let targetContainer = container;
+    if (evt.type === 'tool_call') {
+        if (now - _logGroupTs < 150 && _logGroupEl) {
+            _logGroupCount++;
+            targetContainer = _logGroupEl;
+            const hdr = _logGroupEl.querySelector('.log-group-header');
+            if (hdr) hdr.textContent = `parallel batch (${_logGroupCount} calls)`;
+        } else {
+            _logGroupCount = 1;
+            _logGroupEl = document.createElement('div');
+            _logGroupEl.className = 'log-group';
+            _logGroupEl.innerHTML = '<div class="log-group-header">parallel batch (1 call)</div>';
+            container.appendChild(_logGroupEl);
+            targetContainer = _logGroupEl;
+        }
+        _logGroupTs = now;
+    } else if (evt.type === 'tool_result' && _logGroupEl) {
+        targetContainer = _logGroupEl;
+    }
 
     const entry = document.createElement('div');
     const toolName = evt.tool || 'unknown';
@@ -1476,7 +1527,7 @@ function logToolCall(evt) {
         ${detail}
     `;
 
-    container.appendChild(entry);
+    targetContainer.appendChild(entry);
     container.scrollTop = container.scrollHeight;
 }
 
