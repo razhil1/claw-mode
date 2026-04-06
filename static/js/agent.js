@@ -19,6 +19,10 @@ async function sendPrompt() {
     el.style.height = 'auto';
     document.getElementById('charCount').textContent = '0';
 
+    // Remove any follow-up prompt from previous completion
+    const oldFup = document.querySelector('.follow-up-prompt');
+    if (oldFup) oldFup.remove();
+
     // Hide welcome card
     const wc = document.getElementById('welcomeCard');
     if (wc) wc.style.display = 'none';
@@ -443,12 +447,54 @@ function handleStreamEvent(evt, contentDiv) {
                 ${(evt.files_changed || []).length === 0 && (evt.commands_run || []).length === 0 && (evt.errors_encountered || []).length === 0 ? '<div class="ds-empty">No files modified.</div>' : ''}
             </div>
         `;
-        // Append after the whole message-wrap, not inside it
-        const msgWrap = contentDiv.closest('.message-wrap') || contentDiv.parentElement;
         const chatContainer = document.getElementById('chatMessages');
         if (chatContainer) {
             chatContainer.appendChild(card);
+
+            const oldFollowUp = chatContainer.querySelector('.follow-up-prompt');
+            if (oldFollowUp) oldFollowUp.remove();
+
+            const followUp = document.createElement('div');
+            followUp.className = 'follow-up-prompt';
+            followUp.innerHTML = `
+                <div class="follow-up-label"><i class="fa-solid fa-arrow-right"></i> What's next?</div>
+                <div class="follow-up-input-row">
+                    <textarea class="follow-up-input" placeholder="Describe the next task…" rows="1"></textarea>
+                    <button class="follow-up-send" title="Send"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            `;
+            chatContainer.appendChild(followUp);
+
+            const fInput = followUp.querySelector('.follow-up-input');
+            const fBtn = followUp.querySelector('.follow-up-send');
+
+            const submitFollowUp = () => {
+                const val = fInput.value.trim();
+                if (!val) return;
+                const mainInput = document.getElementById('chatPrompt');
+                if (mainInput) {
+                    mainInput.value = val;
+                    mainInput.dispatchEvent(new Event('input'));
+                }
+                followUp.remove();
+                sendPrompt();
+            };
+
+            fBtn.addEventListener('click', submitFollowUp);
+            fInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitFollowUp();
+                }
+            });
+            fInput.addEventListener('input', () => {
+                fInput.style.height = 'auto';
+                fInput.style.height = Math.min(fInput.scrollHeight, 120) + 'px';
+            });
+
+            setTimeout(() => fInput.focus(), 100);
         } else {
+            const msgWrap = contentDiv.closest('.message-wrap') || contentDiv.parentElement;
             msgWrap.parentElement.insertBefore(card, msgWrap.nextSibling);
         }
         scrollChat();
@@ -1106,6 +1152,9 @@ async function sendSwarmPrompt() {
     el.style.height = 'auto';
     const cc = document.getElementById('charCount');
     if (cc) cc.textContent = '0';
+
+    const oldFup = document.querySelector('.follow-up-prompt');
+    if (oldFup) oldFup.remove();
 
     const wc = document.getElementById('welcomeCard');
     if (wc) wc.style.display = 'none';
