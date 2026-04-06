@@ -7684,3 +7684,118 @@ kbd {
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
+
+.sb-usage {
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+.sb-usage:hover { background: var(--bg-hover); }
+.sb-usage.warning { color: #f59e0b; }
+.sb-usage.critical { color: #f85149; font-weight: 600; }
+.sb-usage.unlimited { color: #a78bfa; }
+
+.limit-reached-card {
+    text-align: center;
+    padding: 32px 24px;
+    background: linear-gradient(135deg, rgba(248, 81, 73, 0.08), rgba(248, 81, 73, 0.02));
+    border: 1px solid rgba(248, 81, 73, 0.2);
+    border-radius: var(--r-lg);
+    margin: 12px 0;
+}
+.limit-reached-card .limit-icon {
+    font-size: 36px;
+    color: #f85149;
+    margin-bottom: 12px;
+}
+.limit-reached-card h4 {
+    margin: 0 0 8px;
+    color: var(--fg);
+    font-size: 16px;
+}
+.limit-reached-card p {
+    margin: 0 0 16px;
+    color: var(--fg-dim);
+    font-size: 13px;
+}
+.limit-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+.limit-actions .btn-primary,
+.limit-actions .btn-ghost {
+    padding: 8px 18px;
+    font-size: 13px;
+    border-radius: var(--r);
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+}
+.limit-actions .btn-primary {
+    background: var(--purple);
+    color: #fff;
+}
+.limit-actions .btn-primary:hover { filter: brightness(1.15); }
+.limit-actions .btn-ghost {
+    background: var(--bg-panel);
+    color: var(--fg-dim);
+    border: 1px solid var(--border-dim);
+}
+.limit-actions .btn-ghost:hover { border-color: var(--purple); color: var(--purple); }
+
+.task-mode-btn.mode-locked {
+    opacity: 0.45;
+    position: relative;
+}
+.task-mode-btn.mode-locked .mode-lock-icon {
+    font-size: 8px;
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    color: #f59e0b;
+}
+.task-mode-btn.mode-locked:hover {
+    opacity: 0.7;
+}
+
+.plan-trial-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.03));
+    border: 1px solid rgba(167, 139, 250, 0.25);
+    border-radius: var(--r-lg);
+    margin-top: 16px;
+}
+.plan-trial-section i { font-size: 20px; color: #a78bfa; }
+.plan-trial-section .trial-text { flex: 1; font-size: 13px; color: var(--fg-dim); }
+.plan-trial-section .trial-text strong { color: var(--fg); }
+.plan-trial-section button { white-space: nowrap; }
+
+.plan-referral-section {
+    padding: 14px 16px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-dim);
+    border-radius: var(--r-lg);
+    margin-top: 12px;
+}
+.plan-referral-section h4 {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: var(--fg);
+}
+.referral-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.referral-row input {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 12px;
+}
+.referral-row button { white-space: nowrap; }

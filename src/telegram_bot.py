@@ -40,9 +40,15 @@ WELCOME_MSG = """
 Welcome! I can help you with:
 
 /start — Show this menu
+/help — Full command reference
 /plans — View available plans
+/trial — Start 7-day free Pro trial
 /activate CODE — Activate a purchase code
 /status — Check your license status
+/referral — Get your referral code
+/redeem CODE — Redeem a referral code
+/usage — Today's usage stats
+/changelog — Latest updates
 /support — Get help
 
 To upgrade, use the /plans command or visit the Plans page in NEXUS IDE.
@@ -150,10 +156,15 @@ def set_webhook(domain: str) -> tuple[bool, str]:
     if not token:
         return False, "Bot token not set."
     webhook_url = f"{domain}/api/telegram/webhook"
+    webhook_secret = hashlib.sha256(token.encode()).hexdigest()[:32]
     try:
         resp = requests.post(
             f"https://api.telegram.org/bot{token}/setWebhook",
-            json={"url": webhook_url, "allowed_updates": ["message"]},
+            json={
+                "url": webhook_url,
+                "allowed_updates": ["message", "callback_query", "pre_checkout_query"],
+                "secret_token": webhook_secret,
+            },
             timeout=10,
         )
         data = resp.json()
@@ -246,10 +257,197 @@ def _get_active_licenses() -> list[dict]:
     ]
 
 
+STAR_PRICES = {
+    "pro": {"amount": 950, "label": "NEXUS Pro — 1 Month"},
+    "enterprise": {"amount": 2450, "label": "NEXUS Enterprise — 1 Month"},
+}
+
+CHANGELOG_TEXT = (
+    "📝 *NEXUS IDE Changelog*\n\n"
+    "*v2.4 — Latest*\n"
+    "• 7-day free Pro trial system\n"
+    "• Referral codes (+10 bonus messages)\n"
+    "• Telegram Stars payment support\n"
+    "• Usage tracking & daily stats\n"
+    "• Feature-gated agent modes\n"
+    "• Message limit enforcement\n\n"
+    "*v2.3*\n"
+    "• Telegram bot integration\n"
+    "• 3-tier subscription system\n"
+    "• License activation flow\n"
+    "• Admin dashboard commands\n\n"
+    "*v2.2*\n"
+    "• 13 built-in tools for agents\n"
+    "• Multi-agent swarm mode\n"
+    "• Git integration\n"
+    "• Environment variable manager"
+)
+
+
+def _send_invoice(chat_id: int, tier: str) -> bool:
+    token = get_bot_token()
+    if not token or tier not in STAR_PRICES:
+        return False
+    info = STAR_PRICES[tier]
+    payload_str = json.dumps({"tier": tier, "chat_id": chat_id})
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{token}/sendInvoice",
+            json={
+                "chat_id": chat_id,
+                "title": info["label"],
+                "description": f"Unlock all {tier.title()} features in NEXUS IDE for 30 days.",
+                "payload": payload_str,
+                "currency": "XTR",
+                "prices": [{"label": info["label"], "amount": info["amount"]}],
+            },
+            timeout=10,
+        )
+        return True
+    except requests.RequestException:
+        return False
+
+
+def _handle_callback_query(callback_query: dict) -> dict:
+    cq_id = callback_query.get("id", "")
+    data = callback_query.get("data", "")
+    chat_id = callback_query.get("message", {}).get("chat", {}).get("id")
+    username = callback_query.get("from", {}).get("username", "")
+    first_name = callback_query.get("from", {}).get("first_name", "")
+    token = get_bot_token()
+
+    if token and cq_id:
+        try:
+            requests.post(
+                f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+                json={"callback_query_id": cq_id},
+                timeout=5,
+            )
+        except requests.RequestException:
+            pass
+
+    if not chat_id:
+        return {"ok": True}
+
+    _register_user(chat_id, username, first_name)
+
+    if data == "upgrade_pro":
+        if _send_invoice(chat_id, "pro"):
+            pass
+        else:
+            _send_message(
+                chat_id,
+                "To upgrade to *Pro*, get a purchase code from NEXUS IDE:\n"
+                "Settings → Plans → Upgrade → send `/activate CODE` here.",
+            )
+    elif data == "upgrade_enterprise":
+        if _send_invoice(chat_id, "enterprise"):
+            pass
+        else:
+            _send_message(
+                chat_id,
+                "To upgrade to *Enterprise*, get a purchase code from NEXUS IDE:\n"
+                "Settings → Plans → Upgrade → send `/activate CODE` here.",
+            )
+    elif data == "start_trial":
+        from .plans import start_free_trial
+        ok, msg = start_free_trial()
+        _send_message(chat_id, f"{'🎉' if ok else '⚠️'} {msg}")
+    elif data == "get_referral":
+        from .plans import generate_referral_code
+        code = generate_referral_code()
+        _send_message(chat_id, f"🔗 Your referral code: `{code}`")
+    elif data == "view_changelog":
+        _send_message(chat_id, CHANGELOG_TEXT)
+
+    return {"ok": True}
+
+
+def _handle_pre_checkout(pre_checkout_query: dict) -> dict:
+    token = get_bot_token()
+    if not token:
+        return {"ok": True}
+    pcq_id = pre_checkout_query.get("id", "")
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{token}/answerPreCheckoutQuery",
+            json={"pre_checkout_query_id": pcq_id, "ok": True},
+            timeout=10,
+        )
+    except requests.RequestException:
+        pass
+    return {"ok": True}
+
+
+def _handle_successful_payment(message: dict) -> dict:
+    chat_id = message.get("chat", {}).get("id")
+    username = message.get("from", {}).get("username", "")
+    payment = message.get("successful_payment", {})
+    payload_str = payment.get("invoice_payload", "{}")
+    try:
+        payload_data = json.loads(payload_str)
+    except (json.JSONDecodeError, TypeError):
+        payload_data = {}
+
+    tier = payload_data.get("tier", "pro")
+    license_key = _generate_license_key(tier)
+
+    config = _load_bot_config()
+    config.setdefault("activated_codes", {})[license_key] = {
+        "tier": tier,
+        "username": username,
+        "chat_id": chat_id,
+        "activated_at": datetime.now().isoformat(),
+        "status": "active",
+        "payment_method": "telegram_stars",
+        "total_amount": payment.get("total_amount", 0),
+        "telegram_payment_charge_id": payment.get("telegram_payment_charge_id", ""),
+    }
+    config.setdefault("payments", []).append({
+        "username": username,
+        "chat_id": chat_id,
+        "tier": tier,
+        "amount": payment.get("total_amount", 0),
+        "currency": payment.get("currency", "XTR"),
+        "charge_id": payment.get("telegram_payment_charge_id", ""),
+        "provider_charge_id": payment.get("provider_payment_charge_id", ""),
+        "timestamp": datetime.now().isoformat(),
+    })
+    _save_bot_config(config)
+
+    _send_message(
+        chat_id,
+        f"🎉 *Payment Successful!*\n\n"
+        f"Plan: *{tier.title()}*\n"
+        f"License Key: `{license_key}`\n\n"
+        f"Copy this key and paste it in NEXUS IDE:\n"
+        f"*Settings → Plans → Enter License Key*\n\n"
+        f"Thank you for your purchase! 🚀",
+    )
+    return {"ok": True}
+
+
+def verify_webhook_secret(request_header: str) -> bool:
+    token = get_bot_token()
+    if not token:
+        return True
+    expected = hashlib.sha256(token.encode()).hexdigest()[:32]
+    return request_header == expected
+
+
 def handle_webhook(payload: dict) -> dict:
+    if "callback_query" in payload:
+        return _handle_callback_query(payload["callback_query"])
+
+    if "pre_checkout_query" in payload:
+        return _handle_pre_checkout(payload["pre_checkout_query"])
+
     message = payload.get("message", {})
     if not message:
         return {"ok": True}
+
+    if "successful_payment" in message:
+        return _handle_successful_payment(message)
 
     chat_id = message.get("chat", {}).get("id")
     text = message.get("text", "").strip()
@@ -270,6 +468,11 @@ def handle_webhook(payload: dict) -> dict:
             "inline_keyboard": [
                 [{"text": "🟣 Upgrade to Pro — $19/mo", "callback_data": "upgrade_pro"}],
                 [{"text": "🟡 Upgrade to Enterprise — $49/mo", "callback_data": "upgrade_enterprise"}],
+                [{"text": "🆓 Start Free Trial (7 days)", "callback_data": "start_trial"}],
+                [
+                    {"text": "🔗 Get Referral Code", "callback_data": "get_referral"},
+                    {"text": "📝 Changelog", "callback_data": "view_changelog"},
+                ],
             ]
         })
 
@@ -341,6 +544,114 @@ def handle_webhook(payload: dict) -> dict:
                 "Get a new code from NEXUS IDE → Settings → Plans → Upgrade.",
             )
 
+    elif text == "/trial":
+        from .plans import start_free_trial
+        ok, msg = start_free_trial()
+        if ok:
+            _send_message(
+                chat_id,
+                "🎉 *Free Trial Activated!*\n\n"
+                f"{msg}\n\n"
+                "Your trial includes:\n"
+                "• Unlimited AI messages\n"
+                "• All 6 agent modes\n"
+                "• Multi-agent swarm mode\n"
+                "• Priority model access\n\n"
+                "Trial expires in 7 days. Upgrade anytime with /plans.",
+            )
+        else:
+            _send_message(chat_id, f"⚠️ {msg}")
+
+    elif text == "/referral":
+        from .plans import generate_referral_code
+        code = generate_referral_code()
+        _send_message(
+            chat_id,
+            f"🔗 *Your Referral Code*\n\n"
+            f"`{code}`\n\n"
+            f"Share this code with friends! When they redeem it:\n"
+            f"• They get *+10 bonus messages/day*\n"
+            f"• You get credit toward your account\n\n"
+            f"Friends can redeem with: `/redeem {code}`",
+        )
+
+    elif text.startswith("/redeem"):
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            _send_message(chat_id, "Usage: `/redeem NXREF-XXXXXXXX`")
+            return {"ok": True}
+        ref_code = parts[1].strip().upper()
+        from .plans import redeem_referral_code
+        ok, msg = redeem_referral_code(ref_code)
+        emoji = "✅" if ok else "❌"
+        _send_message(chat_id, f"{emoji} {msg}")
+
+    elif text == "/usage":
+        from .plans import get_usage_stats
+        stats = get_usage_stats()
+        if stats["unlimited"]:
+            usage_text = "♾️ Unlimited"
+        else:
+            usage_text = f"{stats['used']} / {stats['effective_limit']}"
+            if stats["bonus"] > 0:
+                usage_text += f" (+{stats['bonus']} bonus)"
+        trial_text = ""
+        if stats.get("trial_active"):
+            trial_text = f"\n🆓 Trial expires: {stats['trial_expires'][:10]}"
+        _send_message(
+            chat_id,
+            f"📊 *Usage Stats*\n\n"
+            f"Plan: *{stats['tier'].title()}*\n"
+            f"Messages today: {usage_text}\n"
+            f"Referrals: {stats.get('referrals_count', 0)}"
+            f"{trial_text}",
+        )
+
+    elif text == "/changelog":
+        _send_message(
+            chat_id,
+            "📝 *NEXUS IDE Changelog*\n\n"
+            "*v2.4 — Latest*\n"
+            "• 7-day free Pro trial system\n"
+            "• Referral codes (+10 bonus messages)\n"
+            "• Telegram Stars payment support\n"
+            "• Usage tracking & daily stats\n"
+            "• Feature-gated agent modes\n"
+            "• Message limit enforcement\n\n"
+            "*v2.3*\n"
+            "• Telegram bot integration\n"
+            "• 3-tier subscription system\n"
+            "• License activation flow\n"
+            "• Admin dashboard commands\n\n"
+            "*v2.2*\n"
+            "• 13 built-in tools for agents\n"
+            "• Multi-agent swarm mode\n"
+            "• Git integration\n"
+            "• Environment variable manager",
+        )
+
+    elif text == "/help":
+        _send_message(
+            chat_id,
+            "📖 *NEXUS IDE Bot — Command Reference*\n\n"
+            "*General*\n"
+            "/start — Welcome message\n"
+            "/help — This reference\n"
+            "/plans — View plans & pricing\n"
+            "/changelog — Latest updates\n\n"
+            "*Subscription*\n"
+            "/trial — Start 7-day free Pro trial\n"
+            "/activate CODE — Activate purchase code\n"
+            "/status — Check license status\n"
+            "/usage — Today's usage stats\n\n"
+            "*Referrals*\n"
+            "/referral — Get your referral code\n"
+            "/redeem CODE — Redeem a referral\n\n"
+            "*Support*\n"
+            "/support — Contact support\n\n"
+            "Developer: @hiptyhezo",
+        )
+
     elif text == "/support":
         _send_message(
             chat_id,
@@ -349,6 +660,8 @@ def handle_webhook(payload: dict) -> dict:
             "Common issues:\n"
             "• License activation: Use `/activate CODE`\n"
             "• Plan status: Use `/status`\n"
+            "• Start a free trial: Use `/trial`\n"
+            "• Referral bonus: Use `/referral`\n"
             "• Technical issues: Describe the problem and we'll help\n\n"
             "Developer: @hiptyhezo",
         )
@@ -359,12 +672,13 @@ def handle_webhook(payload: dict) -> dict:
     else:
         _send_message(
             chat_id,
-            "I didn't understand that command. Try:\n"
-            "/start — Menu\n"
+            "I didn't understand that command. Try /help for all commands.\n\n"
+            "Quick reference:\n"
             "/plans — View plans\n"
+            "/trial — Free 7-day Pro trial\n"
             "/activate CODE — Activate license\n"
             "/status — Check status\n"
-            "/support — Get help",
+            "/referral — Get referral code",
         )
 
     return {"ok": True}
@@ -389,14 +703,20 @@ def _handle_admin(chat_id: int, text: str, username: str) -> None:
             v for v in config.get("activated_codes", {}).values()
             if v.get("status") == "active" and v.get("tier") == "enterprise"
         ])
+        payments = config.get("payments", [])
+        total_revenue = sum(p.get("amount", 0) for p in payments)
+        recent_payments = len([p for p in payments if p.get("timestamp", "")[:10] == datetime.now().strftime("%Y-%m-%d")])
         _send_message(
             chat_id,
             f"📊 *Admin Dashboard*\n\n"
-            f"Total Users: {user_count}\n"
-            f"Active Licenses: {active_licenses}\n"
+            f"👥 Total Users: {user_count}\n"
+            f"🔑 Active Licenses: {active_licenses}\n"
             f"  • Pro: {pro_count}\n"
             f"  • Enterprise: {ent_count}\n"
-            f"Webhook: {config.get('webhook_url', 'Not set')}",
+            f"💰 Total Payments: {len(payments)}\n"
+            f"  • Revenue (Stars): {total_revenue}\n"
+            f"  • Today: {recent_payments} payments\n"
+            f"🔗 Webhook: {config.get('webhook_url', 'Not set')}",
         )
 
     elif subcmd == "users":
@@ -488,13 +808,39 @@ def _handle_admin(chat_id: int, text: str, username: str) -> None:
                     sent += 1
         _send_message(chat_id, f"✅ Broadcast sent to {sent}/{len(users)} users.")
 
+    elif subcmd == "payments":
+        config = _load_bot_config()
+        payments = config.get("payments", [])
+        if not payments:
+            _send_message(chat_id, "No payments recorded yet.")
+            return
+        lines = ["💳 *Recent Payments*\n"]
+        for p in payments[-20:]:
+            lines.append(
+                f"• @{p.get('username', '?')} — {p.get('tier', '?').title()}\n"
+                f"  {p.get('amount', 0)} {p.get('currency', 'XTR')} — {p.get('timestamp', '?')[:16]}"
+            )
+        _send_message(chat_id, "\n".join(lines))
+
+    elif subcmd == "trials":
+        from .plans import _load_plan
+        plan = _load_plan()
+        trial_info = "No trial active."
+        if plan.get("trial_active"):
+            trial_info = f"Trial active, expires: {plan.get('trial_expires', 'N/A')[:10]}"
+        elif plan.get("trial_used"):
+            trial_info = f"Trial already used (started: {plan.get('trial_started', 'N/A')[:10]})"
+        _send_message(chat_id, f"🆓 *Trial Status*\n\n{trial_info}")
+
     else:
         _send_message(
             chat_id,
             "🔧 *Admin Commands*\n\n"
-            "/admin stats — Bot statistics\n"
+            "/admin stats — Bot statistics & revenue\n"
             "/admin users — List registered users\n"
             "/admin licenses — List active licenses\n"
+            "/admin payments — Recent payment history\n"
+            "/admin trials — Trial status\n"
             "/admin grant @user pro — Grant a license\n"
             "/admin revoke LICENSE\\_KEY — Revoke a license\n"
             "/admin broadcast MESSAGE — Send to all users",

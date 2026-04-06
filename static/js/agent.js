@@ -69,6 +69,14 @@ async function sendPrompt() {
             body: JSON.stringify(body)
         });
 
+        if (res.status === 400 || res.status === 403) {
+            const errData = await res.json().catch(() => ({}));
+            showToast(errData.message || 'Request failed', 'error');
+            clearInterval(elapsedTimer);
+            setAgentWorking(false);
+            return;
+        }
+
         const contentDiv = appendMessage('', 'agent');
         const reader = res.body.getReader();
         const dec = new TextDecoder();
@@ -150,6 +158,32 @@ async function sendPrompt() {
                         toolsUsed = evt.tools_used || toolsUsed;
                         if (evt.files_changed) filesChanged = evt.files_changed;
                     }
+                    if (evt.type === 'limit_reached') {
+                        contentDiv.innerHTML = `
+                            <div class="limit-reached-card">
+                                <div class="limit-icon"><i class="fa-solid fa-gauge-high"></i></div>
+                                <h4>Daily Message Limit Reached</h4>
+                                <p>${escapeHtml(evt.message)}</p>
+                                <div class="limit-actions">
+                                    <button class="btn-primary" onclick="showPlansModal()"><i class="fa-solid fa-arrow-up"></i> Upgrade Plan</button>
+                                    <button class="btn-ghost" onclick="startFreeTrial()"><i class="fa-solid fa-gift"></i> Start Free Trial</button>
+                                </div>
+                            </div>`;
+                        scrollChat();
+                        updateUsageCounter();
+                    }
+                    if (evt.type === 'feature_locked') {
+                        contentDiv.innerHTML = `
+                            <div class="limit-reached-card">
+                                <div class="limit-icon"><i class="fa-solid fa-lock"></i></div>
+                                <h4>Feature Locked</h4>
+                                <p>${escapeHtml(evt.message)}</p>
+                                <div class="limit-actions">
+                                    <button class="btn-primary" onclick="showPlansModal()"><i class="fa-solid fa-arrow-up"></i> Upgrade to Unlock</button>
+                                </div>
+                            </div>`;
+                        scrollChat();
+                    }
                     if (evt.type === 'error') {
                         showToast('Agent error: ' + evt.message, 'error');
                     }
@@ -163,6 +197,7 @@ async function sendPrompt() {
 
         NX.chatHistory.push({ role: 'assistant', content: fullResponse, time: Date.now() });
         updateAgentStats();
+        updateUsageCounter();
 
         // Final reload of files after agent completes
         await loadFiles();
@@ -871,13 +906,15 @@ function setAgentMode(mode) {
 
 // ─── Task Mode Selector ──────────────────────────────────────────────────────
 function setTaskMode(mode, btn) {
+    if (btn && btn.classList.contains('mode-locked')) {
+        showToast(`${mode.charAt(0).toUpperCase() + mode.slice(1)} mode requires Pro or Enterprise plan`, 'warn');
+        return;
+    }
     NX.taskMode = mode;
     localStorage.setItem('nexus_task_mode', mode);
-    // Update all buttons
     document.querySelectorAll('.task-mode-btn').forEach(b => {
         b.classList.toggle('active', b.dataset.mode === mode);
     });
-    // Update textarea placeholder
     const ta = document.getElementById('chatPrompt');
     if (ta) {
         const hints = {
@@ -1609,3 +1646,72 @@ function filterLogs(filter) {
         e.style.display = (e.dataset.logType === filter) ? '' : 'none';
     });
 }
+
+async function updateUsageCounter() {
+    try {
+        const resp = await fetch('/api/plans/usage');
+        const data = await resp.json();
+        const el = document.getElementById('sbUsageCounter');
+        if (!el) return;
+        if (data.unlimited) {
+            el.innerHTML = '<i class="fa-solid fa-infinity"></i> Unlimited';
+            el.className = 'sb-item sb-usage unlimited';
+        } else {
+            const pct = data.limit > 0 ? Math.round((data.used / data.limit) * 100) : 0;
+            const cls = pct >= 90 ? 'critical' : pct >= 70 ? 'warning' : '';
+            el.innerHTML = `<i class="fa-solid fa-message"></i> ${data.used}/${data.limit}`;
+            el.className = `sb-item sb-usage ${cls}`;
+            el.title = `Messages today: ${data.used}/${data.limit} (${data.tier_name})`;
+        }
+    } catch (e) { }
+}
+
+async function startFreeTrial() {
+    try {
+        const resp = await fetch('/api/plans/trial', { method: 'POST' });
+        const data = await resp.json();
+        if (data.success) {
+            showToast(data.message, 'success');
+            updateUsageCounter();
+            applyModeGating();
+            if (typeof loadPlans === 'function') loadPlans();
+        } else {
+            showToast(data.message, 'warn');
+        }
+    } catch (e) {
+        showToast('Failed to start trial', 'error');
+    }
+}
+
+async function applyModeGating() {
+    try {
+        const resp = await fetch('/api/plans/current');
+        const plan = await resp.json();
+        const availableModes = plan.features?.agent_modes || ['auto', 'builder', 'debugger'];
+        const proModes = ['refactorer', 'researcher', 'reviewer'];
+        document.querySelectorAll('.task-mode-btn').forEach(btn => {
+            const mode = btn.dataset.mode;
+            if (!mode) return;
+            if (proModes.includes(mode) && !availableModes.includes(mode)) {
+                btn.classList.add('mode-locked');
+                btn.title = `${mode.charAt(0).toUpperCase() + mode.slice(1)} — Pro/Enterprise only`;
+                let lock = btn.querySelector('.mode-lock-icon');
+                if (!lock) {
+                    lock = document.createElement('i');
+                    lock.className = 'fa-solid fa-lock mode-lock-icon';
+                    btn.appendChild(lock);
+                }
+            } else {
+                btn.classList.remove('mode-locked');
+                const lock = btn.querySelector('.mode-lock-icon');
+                if (lock) lock.remove();
+            }
+        });
+    } catch (e) { }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateUsageCounter();
+    applyModeGating();
+    setInterval(updateUsageCounter, 60000);
+});

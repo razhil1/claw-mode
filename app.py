@@ -991,6 +991,39 @@ def chat_stream() -> Response:
     if not prompt:
         return _error("'prompt' is required", code="NO_PROMPT")
 
+    from src.plans import check_message_limit, increment_message_count, check_feature, get_current_plan
+    allowed, limit_info = check_message_limit()
+    if not allowed:
+        plan = get_current_plan()
+        def limit_stream():
+            evt = {
+                "type": "limit_reached",
+                "message": limit_info,
+                "current_tier": plan["current_tier"],
+                "upgrade_url": "/api/plans",
+            }
+            yield f"data: {json.dumps(evt)}\n\n"
+            yield "data: [DONE]\n\n"
+        return Response(limit_stream(), mimetype="text/event-stream")
+
+    pro_modes = {"refactorer", "researcher", "reviewer"}
+    if mode_override in pro_modes:
+        plan = get_current_plan()
+        available_modes = plan.get("features", {}).get("agent_modes", [])
+        if mode_override not in available_modes:
+            def mode_gate_stream():
+                evt = {
+                    "type": "feature_locked",
+                    "message": f"The '{mode_override.title()}' mode requires a Pro or Enterprise plan.",
+                    "feature": "agent_mode",
+                    "mode": mode_override,
+                }
+                yield f"data: {json.dumps(evt)}\n\n"
+                yield "data: [DONE]\n\n"
+            return Response(mode_gate_stream(), mimetype="text/event-stream")
+
+    increment_message_count()
+
     agent = _registry.get_or_create(session_id, ultra=ULTRA_MODE, model=ACTIVE_MODEL)
 
     event_queue: list[dict] = []
@@ -1880,6 +1913,41 @@ def api_deactivate_license() -> Response:
     ok, msg = deactivate_license()
     return jsonify({"success": ok, "message": msg})
 
+@app.route("/api/plans/usage")
+def api_usage() -> Response:
+    from src.plans import get_usage_stats
+    stats = get_usage_stats()
+    return jsonify({
+        "used": stats["used"],
+        "limit": stats["effective_limit"],
+        "bonus": stats["bonus"],
+        "unlimited": stats["unlimited"],
+        "remaining": stats["remaining"],
+        "tier": stats["tier"],
+        "tier_name": stats["tier"].title(),
+        "trial_active": stats.get("trial_active", False),
+    })
+
+@app.route("/api/plans/trial", methods=["POST"])
+def api_start_trial() -> Response:
+    from src.plans import start_free_trial
+    ok, msg = start_free_trial()
+    return jsonify({"success": ok, "message": msg}), (200 if ok else 400)
+
+@app.route("/api/plans/referral", methods=["POST"])
+def api_generate_referral() -> Response:
+    from src.plans import generate_referral_code
+    code = generate_referral_code()
+    return jsonify({"code": code})
+
+@app.route("/api/plans/redeem-referral", methods=["POST"])
+def api_redeem_referral() -> Response:
+    data = request.json or {}
+    code = data.get("code", "")
+    from src.plans import redeem_referral_code
+    ok, msg = redeem_referral_code(code)
+    return jsonify({"success": ok, "message": msg}), (200 if ok else 400)
+
 @app.route("/api/profile")
 def api_profile() -> Response:
     from src.plans import get_current_plan
@@ -1893,6 +1961,10 @@ def api_profile() -> Response:
         "license_key": plan.get("license_key"),
         "activated_at": plan.get("activated_at"),
         "expires_at": plan.get("expires_at"),
+        "trial_active": plan.get("trial_active", False),
+        "trial_expires": plan.get("trial_expires"),
+        "referral_code": plan.get("referral_code"),
+        "referrals_count": plan.get("referrals_count", 0),
     })
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1901,7 +1973,10 @@ def api_profile() -> Response:
 
 @app.route("/api/telegram/webhook", methods=["POST"])
 def telegram_webhook() -> Response:
-    from src.telegram_bot import handle_webhook
+    from src.telegram_bot import handle_webhook, verify_webhook_secret
+    secret_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not verify_webhook_secret(secret_header):
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
     payload = request.json or {}
     result = handle_webhook(payload)
     return jsonify(result)

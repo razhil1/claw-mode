@@ -186,6 +186,11 @@ def get_current_plan() -> dict:
     tier_info["license_key"] = plan_data.get("license_key")
     tier_info["activated_at"] = plan_data.get("activated_at")
     tier_info["expires_at"] = plan_data.get("expires_at")
+    tier_info["trial_active"] = plan_data.get("trial_active", False)
+    tier_info["trial_expires"] = plan_data.get("trial_expires")
+    tier_info["referral_code"] = plan_data.get("referral_code")
+    tier_info["referrals_count"] = plan_data.get("referrals_count", 0)
+    tier_info["bonus_messages"] = plan_data.get("bonus_messages", 0)
     return tier_info
 
 
@@ -200,18 +205,21 @@ def get_all_plans() -> dict:
 
 
 def check_message_limit() -> tuple[bool, str]:
+    check_trial_expiry()
     plan = _load_plan()
     tier = plan.get("tier", "community")
     limit = TIERS.get(tier, TIERS["community"])["features"]["messages_per_day"]
     if limit == -1:
         return True, "unlimited"
+    bonus = plan.get("bonus_messages", 0)
+    effective_limit = limit + bonus
     today = datetime.now().strftime("%Y-%m-%d")
     if plan.get("last_message_date") != today:
         plan["messages_today"] = 0
         plan["last_message_date"] = today
-    if plan["messages_today"] >= limit:
-        return False, f"Daily limit reached ({limit} messages). Upgrade to Pro for unlimited."
-    return True, f"{plan['messages_today']}/{limit}"
+    if plan["messages_today"] >= effective_limit:
+        return False, f"Daily limit reached ({effective_limit} messages). Upgrade to Pro for unlimited."
+    return True, f"{plan['messages_today']}/{effective_limit}"
 
 
 def increment_message_count() -> int:
@@ -280,5 +288,119 @@ def deactivate_license() -> tuple[bool, str]:
     plan["license_key"] = None
     plan["activated_at"] = None
     plan["expires_at"] = None
+    plan["trial_active"] = False
+    plan["trial_expires"] = None
     _save_plan(plan)
     return True, "License deactivated. Reverted to Community plan."
+
+
+def start_free_trial() -> tuple[bool, str]:
+    plan = _load_plan()
+    if plan.get("tier") != "community":
+        return False, "You already have a paid plan."
+    if plan.get("trial_used"):
+        return False, "You have already used your free trial."
+    plan["tier"] = "pro"
+    plan["trial_active"] = True
+    plan["trial_used"] = True
+    plan["trial_started"] = datetime.now().isoformat()
+    plan["trial_expires"] = (datetime.now() + timedelta(days=7)).isoformat()
+    plan["expires_at"] = plan["trial_expires"]
+    _save_plan(plan)
+    return True, "7-day Pro trial activated! Enjoy unlimited messages and all Pro features."
+
+
+def check_trial_expiry() -> None:
+    plan = _load_plan()
+    if plan.get("trial_active") and plan.get("trial_expires"):
+        try:
+            exp = datetime.fromisoformat(plan["trial_expires"])
+            if datetime.now() > exp:
+                plan["tier"] = "community"
+                plan["trial_active"] = False
+                plan["license_key"] = None
+                plan["expires_at"] = None
+                _save_plan(plan)
+        except (ValueError, TypeError):
+            pass
+
+
+REFERRAL_REGISTRY = CONFIG_DIR / "referral_codes.json"
+
+
+def _load_referral_registry() -> dict:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    if REFERRAL_REGISTRY.exists():
+        try:
+            return json.loads(REFERRAL_REGISTRY.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"codes": {}, "redemptions": []}
+
+
+def _save_referral_registry(data: dict) -> None:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    REFERRAL_REGISTRY.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def generate_referral_code() -> str:
+    plan = _load_plan()
+    if plan.get("referral_code"):
+        return plan["referral_code"]
+    code = f"NXREF-{secrets.token_hex(4).upper()}"
+    plan["referral_code"] = code
+    plan.setdefault("referrals", [])
+    plan.setdefault("referrals_count", 0)
+    _save_plan(plan)
+    registry = _load_referral_registry()
+    registry["codes"][code] = {
+        "created_at": datetime.now().isoformat(),
+        "redeemed_count": 0,
+    }
+    _save_referral_registry(registry)
+    return code
+
+
+def redeem_referral_code(code: str) -> tuple[bool, str]:
+    if not code or not code.startswith("NXREF-"):
+        return False, "Invalid referral code format."
+    registry = _load_referral_registry()
+    if code not in registry.get("codes", {}):
+        return False, "Referral code not found. Make sure you entered it correctly."
+    plan = _load_plan()
+    if code == plan.get("referral_code"):
+        return False, "You cannot redeem your own referral code."
+    if code in plan.get("redeemed_referrals", []):
+        return False, "You have already redeemed this referral code."
+    plan.setdefault("redeemed_referrals", []).append(code)
+    bonus = plan.get("bonus_messages", 0) + 10
+    plan["bonus_messages"] = bonus
+    _save_plan(plan)
+    registry["codes"][code]["redeemed_count"] = registry["codes"][code].get("redeemed_count", 0) + 1
+    registry["redemptions"].append({
+        "code": code,
+        "redeemed_at": datetime.now().isoformat(),
+    })
+    _save_referral_registry(registry)
+    return True, f"Referral redeemed! You got 10 bonus messages (total bonus: {bonus})."
+
+
+def get_usage_stats() -> dict:
+    plan = _load_plan()
+    tier = plan.get("tier", "community")
+    limit = TIERS.get(tier, TIERS["community"])["features"]["messages_per_day"]
+    used = plan.get("messages_today", 0)
+    bonus = plan.get("bonus_messages", 0)
+    effective_limit = limit + bonus if limit != -1 else -1
+    return {
+        "used": used,
+        "limit": limit,
+        "bonus": bonus,
+        "effective_limit": effective_limit,
+        "unlimited": limit == -1,
+        "remaining": max(0, effective_limit - used) if effective_limit != -1 else -1,
+        "tier": tier,
+        "trial_active": plan.get("trial_active", False),
+        "trial_expires": plan.get("trial_expires"),
+        "referrals_count": plan.get("referrals_count", 0),
+    }

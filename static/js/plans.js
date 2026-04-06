@@ -73,6 +73,14 @@
                 </div>`;
         });
         html += '</div>';
+        if (current === 'community') {
+            html += `
+                <div class="plan-trial-section">
+                    <i class="fa-solid fa-gift"></i>
+                    <div class="trial-text"><strong>Try Pro free for 7 days</strong> — Unlimited messages, all agent modes, multi-agent swarm</div>
+                    <button class="btn-primary" onclick="startFreeTrial()"><i class="fa-solid fa-play"></i> Start Trial</button>
+                </div>`;
+        }
         html += `
             <div class="plan-license-section">
                 <h4><i class="fa-solid fa-key"></i> Have a license key?</h4>
@@ -82,9 +90,21 @@
                 </div>
                 ${NXPlans.current?.license_key ? `<div class="plan-active-license"><i class="fa-solid fa-circle-check"></i> Active: ${NXPlans.current.license_key}</div>` : ''}
             </div>
+            <div class="plan-referral-section">
+                <h4><i class="fa-solid fa-link"></i> Referral Program — Earn bonus messages</h4>
+                <div class="referral-row">
+                    <input type="text" id="referralCodeDisplay" class="modal-input" readonly placeholder="Click Generate to get your code" />
+                    <button class="btn-ghost" onclick="generateReferralCode()"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate</button>
+                    <button class="btn-ghost" onclick="copyReferralCode()"><i class="fa-solid fa-copy"></i></button>
+                </div>
+                <div class="referral-row" style="margin-top:8px">
+                    <input type="text" id="redeemReferralInput" class="modal-input" placeholder="Enter friend's referral code" />
+                    <button class="btn-primary" onclick="redeemReferralCode()"><i class="fa-solid fa-gift"></i> Redeem</button>
+                </div>
+            </div>
             <div class="plan-telegram-cta">
                 <i class="fa-brands fa-telegram" style="font-size:20px;color:#29b6f6"></i>
-                <span>Purchase via Telegram: Send <code>/plans</code> to <strong>@NexusIDEBot</strong></span>
+                <span>Purchase via Telegram: Send <code>/plans</code> to <strong>@NexusIDEBot</strong> — supports Telegram Stars payment</span>
             </div>`;
         container.innerHTML = html;
     }
@@ -278,6 +298,47 @@
             console.warn('Telegram status check failed:', e);
         }
     }
+
+    window.generateReferralCode = async function() {
+        try {
+            const resp = await fetch('/api/plans/referral', { method: 'POST' });
+            const data = await resp.json();
+            const el = document.getElementById('referralCodeDisplay');
+            if (el && data.code) {
+                el.value = data.code;
+                showToast('Referral code generated! Share it with friends.', 'success');
+            }
+        } catch (e) {
+            showToast('Failed to generate referral code', 'error');
+        }
+    };
+
+    window.copyReferralCode = function() {
+        const el = document.getElementById('referralCodeDisplay');
+        if (el && el.value) {
+            navigator.clipboard.writeText(el.value).then(() => showToast('Copied!', 'success'));
+        } else {
+            showToast('Generate a code first', 'warn');
+        }
+    };
+
+    window.redeemReferralCode = async function() {
+        const el = document.getElementById('redeemReferralInput');
+        const code = el?.value?.trim();
+        if (!code) { showToast('Enter a referral code', 'warn'); return; }
+        try {
+            const resp = await fetch('/api/plans/redeem-referral', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code }),
+            });
+            const data = await resp.json();
+            showToast(data.message, data.success ? 'success' : 'error');
+            if (data.success && el) el.value = '';
+        } catch (e) {
+            showToast('Failed to redeem code', 'error');
+        }
+    };
 
     document.addEventListener('DOMContentLoaded', () => {
         loadPlans();
