@@ -160,22 +160,32 @@ def tool_search(path: str, query: str) -> str:
 
 
 def tool_bash_run(command: str) -> str:
-    _PROTECTED_PATTERNS = [
-        'app.py', 'main.py', 'models.py',
-        'src/', 'src\\', 'templates/', 'templates\\', 'static/', 'static\\',
-        '../', '..\\',
-    ]
+    ws = get_workspace_root()
+    ws_str = str(ws)
+
     _DANGEROUS_CMDS = re.compile(
         r'(?:^|[\s;&|])'
         r'(?:cat|rm|mv|cp|nano|vi|vim|code|python|node|sed|awk|perl|dd|truncate|shred)\s',
     )
-    ws = str(get_workspace_root())
+
     if _DANGEROUS_CMDS.search(command):
-        cmd_lower = command.lower()
-        touches_protected = any(p in cmd_lower for p in _PROTECTED_PATTERNS)
-        refs_workspace = ws in command or 'agent_workspace' in command
-        if touches_protected and not refs_workspace:
-            return "Security error: Access denied to IDE system files. Please operate inside agent_workspace."
+        import shlex
+        try:
+            tokens = shlex.split(command)
+        except ValueError:
+            tokens = command.split()
+
+        for tok in tokens:
+            if tok.startswith('-'):
+                continue
+            resolved = os.path.normpath(os.path.join(ws_str, tok))
+            resolved_real = os.path.realpath(resolved)
+            if '..' in tok or not resolved_real.startswith(ws_str + os.sep):
+                if any(p in tok.lower() for p in [
+                    'app.py', 'main.py', 'models.py',
+                    'src/', 'src\\', 'templates/', 'templates\\', 'static/', 'static\\',
+                ]) or '..' in tok:
+                    return "Security error: Access denied to IDE system files. Please operate inside agent_workspace."
 
     try:
         workspace_cwd = get_workspace_root()
