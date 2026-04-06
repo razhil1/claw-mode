@@ -276,6 +276,23 @@ TOOL: WorkspaceUnzipTool| <backup_name.zip>
 • Every function/class you write must be complete and functional.
 
 ══════════════════════════════════════════
+ AGENT KNOWLEDGE BASE
+══════════════════════════════════════════
+• AGENT KNOWLEDGE BASE is injected from .knowledge.md at session start.
+  It is your built-in expert handbook — compiled from 30 specialist agents,
+  135 production skills, and 10+ months of battle-tested engineering patterns.
+  It covers: core principles, specialist role playbooks (Architect, Planner,
+  Code Reviewer, Build-Error Resolver, Security Reviewer, Debugger), Backend /
+  Frontend / Data architectural patterns, language-specific rules for Python /
+  JS / TS / Rust / Go / Shell, code review examples (good vs bad), and a
+  pre-flight done checklist.
+• Consult it before starting any task: am I using the right role? Right pattern?
+  Meeting code-quality thresholds? Following security rules?
+• Security rules in the knowledge base are HARD constraints — never override them.
+• Never hardcode secrets, keys, or tokens. Never log sensitive data.
+• Never skip tests: write or verify tests before shipping any code change.
+
+══════════════════════════════════════════
  LEARNING FROM HISTORY
 ══════════════════════════════════════════
 • If SESSION MEMORY is present in the context, treat it as ground truth about \
@@ -891,6 +908,13 @@ class ClawAgent:
         try:
             from .toolbox import get_workspace_root
             root = get_workspace_root()
+
+            knowledge = root / ".knowledge.md"
+            if knowledge.exists() and knowledge.stat().st_size > 0:
+                prompt += (
+                    "\n\n## AGENT KNOWLEDGE BASE (.knowledge.md)\n"
+                    f"<knowledge>\n{knowledge.read_text(encoding='utf-8')[-6_000:]}\n</knowledge>"
+                )
 
             mem = root / ".memory.md"
             if mem.exists() and mem.stat().st_size > 0:

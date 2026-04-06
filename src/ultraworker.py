@@ -67,6 +67,7 @@ PATCH_FAIL_LIMIT       = 2        # Consecutive failures before auto-recovery
 RESULT_MAX_CHARS       = 4_000    # Trim threshold for tool output
 MEMORY_MAX_LINES       = 20       # Lines of .memory.md to inject
 ATLAS_MAX_LINES        = 15       # Lines of .atlas.md to inject
+KNOWLEDGE_MAX_LINES    = 120      # Lines of .knowledge.md to inject
 WORKSPACE_MAP_MAX      = 100      # Max entries in workspace tree snapshot
 MAX_RETRIES            = 3        # Per-tool auto-retry limit
 MAX_CONSECUTIVE_ERRORS = 6        # Error-cascade breaker threshold
@@ -351,6 +352,18 @@ TOOL: WorkspaceUnzipTool| <backup_name.zip>
 • Full error handling — no bare except, no uncaught panics, no silent failures.
 • No TODO stubs, no placeholder comments, no incomplete implementations.
 • Responsive UI if applicable. Clean, well-structured code throughout.
+
+━━━ KNOWLEDGE BASE ━━━
+• AGENT KNOWLEDGE BASE is injected from .knowledge.md — treat it as your
+  built-in expert handbook. It contains: core engineering principles, specialist
+  role playbooks (Architect, Planner, Code Reviewer, Build-Error Resolver,
+  Security Reviewer, Debugger), architectural patterns for Backend/Frontend/Data,
+  language-specific rules for Python/JS/TS/Rust/Go/Shell, production-grade
+  code review examples (good vs bad), and a pre-flight done checklist.
+• Before starting any non-trivial task, mentally check the relevant section of
+  the knowledge base: Are you following the right patterns? Applying the right
+  role? Meeting the code quality thresholds?
+• Security rules in the knowledge base are HARD constraints — never override them.
 
 ━━━ LEARNING FROM SESSION MEMORY ━━━
 • If SESSION MEMORY appears in the context, treat it as ground truth.
@@ -908,8 +921,9 @@ class ContextManager:
     def build(self, user_prompt: str, root: Path) -> list[dict]:
         extras: list[str] = []
         for fname, label, max_l in [
-            (".memory.md", "SESSION MEMORY", MEMORY_MAX_LINES),
-            (".atlas.md",  "PROJECT ATLAS",  ATLAS_MAX_LINES),
+            (".knowledge.md", "AGENT KNOWLEDGE BASE", KNOWLEDGE_MAX_LINES),
+            (".memory.md",    "SESSION MEMORY",        MEMORY_MAX_LINES),
+            (".atlas.md",     "PROJECT ATLAS",          ATLAS_MAX_LINES),
         ]:
             p = root / fname
             if p.exists():
