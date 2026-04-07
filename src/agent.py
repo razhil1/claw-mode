@@ -57,11 +57,11 @@ from .toolbox import (
 MAX_AGENT_TURNS        = 16    # Hard ceiling — forces concise, plan-driven execution
 MAX_HISTORY_PAIRS      = 30    # Conversation pairs kept across sessions
 MAX_RETRIES            = 2     # Per-tool retry limit — fail fast, don't burn tokens
-LOOP_DETECT_WINDOW     = 3     # Catch repetition early (3 identical calls = looping)
+LOOP_DETECT_WINDOW     = 5     # Window of recent calls to check for repetition
 CONTEXT_COMPRESS_AT    = 12    # Compress history proactively to save context
-MAX_CONSECUTIVE_ERRORS = 3     # Stop quickly on cascading failures
+MAX_CONSECUTIVE_ERRORS = 5     # Stop on cascading failures
 RESULT_TRIM_CHARS      = 2_000 # Tool output trimmed to this in history
-NO_PROGRESS_TURNS      = 4     # Halt if no file changes after this many turns
+NO_PROGRESS_TURNS      = 6     # Nudge if no file changes after this many turns
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -542,42 +542,78 @@ class RollbackRegistry:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class LoopDetector:
-    """Detect when the agent is stuck repeating the same tool call."""
+    """Detect when the agent is stuck repeating the same tool call or cycling
+    between a small set of identical calls.
+
+    Detection strategy:
+    1. Single-call repeat: the last N calls are all identical.
+    2. Cycle repeat: a short pattern (2-3 calls) is repeating across the window.
+    Both only fire after enough history has accumulated to be confident.
+    """
 
     def __init__(self, window: int = LOOP_DETECT_WINDOW) -> None:
         self._window  = window
         self._history: list[str] = []
         self._loop_count = 0
+        self._recovery_turns = 0
 
     def record(self, tool_name: str, payload_hash: str) -> None:
         self._history.append(f"{tool_name}:{payload_hash}")
-        if len(self._history) > self._window * 3:
-            self._history = self._history[-self._window * 3:]
+        if len(self._history) > self._window * 4:
+            self._history = self._history[-self._window * 4:]
+        if self._recovery_turns > 0:
+            self._recovery_turns -= 1
+
+    def _check_pattern(self, pattern_len: int) -> bool:
+        needed = pattern_len * 3
+        if len(self._history) < needed:
+            return False
+        pattern = self._history[-pattern_len:]
+        for offset in range(1, 3):
+            start = -(pattern_len * (offset + 1))
+            end   = -(pattern_len * offset)
+            if self._history[start:end] != pattern:
+                return False
+        return True
 
     def is_looping(self) -> bool:
+        if self._recovery_turns > 0:
+            return False
         if len(self._history) < self._window:
             return False
         recent = self._history[-self._window:]
-        if len(set(recent)) <= 2:
+        if len(set(recent)) == 1:
             self._loop_count += 1
+            self._recovery_turns = 3
             return True
+        for plen in (2, 3):
+            if self._check_pattern(plen):
+                self._loop_count += 1
+                self._recovery_turns = 3
+                return True
         return False
 
     @property
     def should_force_stop(self) -> bool:
-        return self._loop_count >= 2
+        return self._loop_count >= 3
 
     def hint(self) -> str:
-        if self._loop_count >= 2:
+        if self._loop_count >= 3:
             return (
-                "LOOP DETECTED TWICE: You are stuck in a cycle. STOP NOW. "
+                "LOOP DETECTED 3 TIMES: You are stuck in a cycle. STOP NOW. "
                 "Emit a DONE block with what you have completed so far. "
                 "Do NOT make any more tool calls."
             )
+        if self._loop_count >= 2:
+            return (
+                "LOOP DETECTED AGAIN: You are repeating the same actions. "
+                "You MUST try a completely different approach right now. "
+                "If you cannot make progress, emit a DONE block with what is finished."
+            )
         return (
-            f"LOOP DETECTED: You repeated the same call {self._window} times. "
-            "STOP and try a completely different approach. If stuck, emit DONE "
-            "with a summary of what was completed and what remains."
+            f"LOOP DETECTED: You repeated the same call(s) {self._window} times. "
+            "Try a different approach — different tool, different file, or different strategy. "
+            "If the task is done, emit DONE with a summary."
         )
 
 
@@ -1473,14 +1509,14 @@ class ClawAgent:
             tool_name, payload = tool_calls[0]
             payload = _clean_payload(payload)
 
-            # Loop detection (full payload hash for accuracy)
             phash = hashlib.md5(payload.encode()).hexdigest()[:12]
             loop_guard.record(tool_name, phash)
             if loop_guard.is_looping():
                 hint = loop_guard.hint()
                 yield {"type": "loop_warn", "text": hint}
+                messages.append({"role": "assistant", "content": response_text.strip() or "(empty)"})
                 messages.append({"role": "user", "content": f"[System Warning] {hint}"})
-                consecutive_errors += 1
+                full_content.append(response_text)
                 continue
 
             # Read-only mode: block any write/execute tools

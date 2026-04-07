@@ -586,27 +586,68 @@ class RollbackRegistry:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class LoopDetector:
-    """Detect when the agent is stuck repeating the same tool call."""
+    """Detect when the agent is stuck repeating the same tool call or cycling
+    between a small set of identical calls."""
 
     def __init__(self, window: int = LOOP_DETECT_WINDOW) -> None:
         self._window  = window
         self._history: list[str] = []
+        self._loop_count = 0
+        self._recovery_turns = 0
 
     def record(self, tool_name: str, payload_hash: str) -> None:
         self._history.append(f"{tool_name}:{payload_hash}")
-        if len(self._history) > self._window * 2:
-            self._history = self._history[-self._window * 2:]
+        if len(self._history) > self._window * 4:
+            self._history = self._history[-self._window * 4:]
+        if self._recovery_turns > 0:
+            self._recovery_turns -= 1
+
+    def _check_pattern(self, pattern_len: int) -> bool:
+        needed = pattern_len * 3
+        if len(self._history) < needed:
+            return False
+        pattern = self._history[-pattern_len:]
+        for offset in range(1, 3):
+            start = -(pattern_len * (offset + 1))
+            end   = -(pattern_len * offset)
+            if self._history[start:end] != pattern:
+                return False
+        return True
 
     def is_looping(self) -> bool:
+        if self._recovery_turns > 0:
+            return False
         if len(self._history) < self._window:
             return False
         recent = self._history[-self._window:]
-        return len(set(recent)) <= 2
+        if len(set(recent)) == 1:
+            self._loop_count += 1
+            self._recovery_turns = 3
+            return True
+        for plen in (2, 3):
+            if self._check_pattern(plen):
+                self._loop_count += 1
+                self._recovery_turns = 3
+                return True
+        return False
+
+    @property
+    def should_force_stop(self) -> bool:
+        return self._loop_count >= 3
 
     def hint(self) -> str:
-        recent = self._history[-self._window:]
+        if self._loop_count >= 3:
+            return (
+                "LOOP DETECTED 3 TIMES: You are stuck in a cycle. STOP NOW. "
+                "Emit a DONE block with what you have completed so far."
+            )
+        if self._loop_count >= 2:
+            return (
+                "LOOP DETECTED AGAIN: You are repeating the same actions. "
+                "Try a completely different approach or emit DONE."
+            )
         return (
-            f"⚠️ Loop detected — same calls repeated: {set(recent)}. "
+            f"⚠️ Loop detected — same calls repeated over {self._window} turns. "
             "Abandon current approach. Try a completely different strategy or tool sequence."
         )
 
@@ -1423,11 +1464,17 @@ class UltraWorker:
                 yield {"type": "stopped", "message": "Stopped by user.", "turns": state.total_turns}
                 break
 
-            # Consecutive-error breaker
             if state.consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
                 yield {
                     "type":    "error",
                     "message": f"Halted: {state.consecutive_errors} consecutive errors.",
+                }
+                break
+
+            if loop_guard.should_force_stop:
+                yield {
+                    "type":    "error",
+                    "message": "Agent stopped: stuck in a repetitive loop. Try rephrasing or breaking the task into smaller parts.",
                 }
                 break
 
@@ -1599,32 +1646,21 @@ class UltraWorker:
                     full_content.append(response)
                     continue
 
-                # Loop detection
                 phash = hashlib.md5(payload[:200].encode()).hexdigest()[:8]
                 loop_guard.record(tool, phash)
                 if loop_guard.is_looping():
                     hint = loop_guard.hint()
                     yield {"type": "loop_warn", "text": hint}
-                    ctx.add_turn(TurnRecord(
-                        turn_num=turn + 1, phase=state.current_phase.value,
-                        assistant="[loop detected]", tools=[], results=[hint],
-                    ))
-                    state.consecutive_errors += 1
-                    # Inject escape hint into context
+                    ctx._raw.append({"role": "assistant", "content": response.strip() or "(empty)"})
                     ctx._raw.append({"role": "user", "content": f"[System Warning] {hint}"})
+                    full_content.append(response)
+                    if loop_guard.should_force_stop:
+                        yield {"type": "error", "message": "Agent stopped: stuck in a repetitive loop."}
+                        break
                     continue
 
-                # Snapshot + track before write
                 self._snapshot_if_write(tool, payload, registry)
                 self._pretrack(tool, payload, tracker)
-
-                phash = hashlib.md5(payload[:200].encode()).hexdigest()[:8]
-                loop_guard.record(tool, phash)
-                if loop_guard.is_looping():
-                    hint = loop_guard.hint()
-                    yield {"type": "loop_warn", "text": hint}
-                    ctx._raw.append({"role": "user", "content": f"[System Warning] {hint}"})
-                    continue
 
                 # Emit step_start if we have a tracked plan step
                 if plan_steps and step_index < len(plan_steps):
@@ -1720,12 +1756,21 @@ class UltraWorker:
                 for t, p in calls:
                     self._snapshot_if_write(t, p, registry)
                     self._pretrack(t, p, tracker)
-                    # Track bash commands
                     if t == "BashTool":
                         commands_run.append(p[:120])
-                    # Loop detection on all parallel tools
                     h = hashlib.md5(p[:200].encode()).hexdigest()[:8]
                     loop_guard.record(t, h)
+
+                if loop_guard.is_looping():
+                    hint = loop_guard.hint()
+                    yield {"type": "loop_warn", "text": hint}
+                    ctx._raw.append({"role": "assistant", "content": response.strip() or "(empty)"})
+                    ctx._raw.append({"role": "user", "content": f"[System Warning] {hint}"})
+                    full_content.append(response)
+                    if loop_guard.should_force_stop:
+                        yield {"type": "error", "message": "Agent stopped: stuck in a repetitive loop."}
+                        break
+                    continue
 
                 futures = {
                     self._pool.submit(execute_tool, t, p, root): (t, p)
